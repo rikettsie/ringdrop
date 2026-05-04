@@ -7,10 +7,10 @@
 //! rdrop id
 //!
 //! # Manage rings
-//! rdrop ring new                       # create a private ring
-//! rdrop ring list                      # list all rings (open-ring always first)
-//! rdrop ring add <ring-id> <peer-id>   # add a peer to a ring
-//! rdrop ring members <ring-id>
+//! rdrop ring new friends               # create a ring named "friends"
+//! rdrop ring list                      # list all rings
+//! rdrop ring add friends <peer-id>     # add a peer to a ring
+//! rdrop ring members friends
 //!
 //! # Share a file and get a ticket
 //! rdrop share file.txt
@@ -20,9 +20,9 @@
 //! rdrop receive rdrop://ABCDEF... [--dest ./downloads]
 //!
 //! # Grant access to a shared file (by path or hash)
-//! rdrop tag file.txt --ring <uuid>
+//! rdrop tag file.txt --ring friends
 //! rdrop tag file.txt --open
-//! rdrop tag <hash> --ring <uuid>
+//! rdrop tag <hash> --ring friends
 //! rdrop tag <hash> --open
 //! ```
 
@@ -32,13 +32,12 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-
 use iroh_blobs::{BlobFormat, Hash};
 
 use crate::core::Node;
-use crate::registry::{Registry, OPEN_RING_ID};
+use crate::registry::{Registry, OPEN_RING_NAME};
 use crate::ticket::ShareTicket;
-use crate::util::{default_data_dir, parse_hash, parse_ring_id};
+use crate::util::{default_data_dir, parse_hash};
 use command::Cmd;
 
 #[derive(Parser)]
@@ -109,11 +108,8 @@ pub async fn run() -> Result<()> {
             println!("  rdrop receive {ticket_str}");
             println!();
             println!("Grant access with:");
-            println!(
-                "  rdrop tag {} --ring <uuid>  # private ring",
-                path.display()
-            );
-            println!("  rdrop tag {} --open          # anyone", path.display());
+            println!("  rdrop tag {} --ring <ring-name>  # private ring", path.display());
+            println!("  rdrop tag {} --open               # anyone", path.display());
             println!();
             println!("Serving… (Ctrl-C to stop)");
 
@@ -146,7 +142,7 @@ pub async fn run() -> Result<()> {
                         eprintln!();
                         eprintln!("Your PeerId: {}", node.peer_id());
                         eprintln!("Ask the file owner to run:");
-                        eprintln!("  rdrop ring add <ring-id> {}", node.peer_id());
+                        eprintln!("  rdrop ring add <ring-name> {}", node.peer_id());
                     }
                     std::process::exit(1);
                 }
@@ -162,14 +158,13 @@ pub async fn run() -> Result<()> {
         } => {
             let (hash, registry) = resolve_target(&target, &data_dir).await?;
 
-            for s in &rings {
-                let rid = parse_ring_id(s)?;
-                registry.tag_file(hash, rid)?;
-                println!("Tagged {hash} with ring {rid}");
+            for ring in &rings {
+                registry.tag_file(hash, ring)?;
+                println!("Tagged {hash} with ring '{ring}'");
             }
             if open {
-                registry.tag_file(hash, OPEN_RING_ID)?;
-                println!("Tagged {hash} as open-ring (publicly accessible)");
+                registry.tag_file(hash, OPEN_RING_NAME)?;
+                println!("Tagged {hash} as open (publicly accessible)");
             }
         }
 
@@ -183,9 +178,9 @@ pub async fn run() -> Result<()> {
                 println!("{}: {} ring(s):", hash, rings.len());
                 for ring in &rings {
                     if ring.is_open() {
-                        println!("  {ring}  (open — publicly accessible)");
+                        println!("  {}  (open — publicly accessible)", ring.as_str());
                     } else {
-                        println!("  {ring}");
+                        println!("  {}", ring.as_str());
                     }
                 }
             }

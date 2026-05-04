@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::registry::Registry;
-use crate::util::{parse_peer_id, parse_ring_id};
+use crate::registry::{Registry, OPEN_RING_NAME};
+use crate::util::parse_peer_id;
 
 #[derive(Subcommand)]
 pub enum Cmd {
@@ -34,10 +34,10 @@ pub enum Cmd {
     Tag {
         /// File path or BLAKE3 hash (hex)
         target: String,
-        /// Tag with a private ring (repeat for multiple)
+        /// Tag with a named ring (repeat for multiple)
         #[arg(long = "ring", conflicts_with = "open")]
         rings: Vec<String>,
-        /// Tag with the open-ring so anyone can download
+        /// Tag as publicly accessible (anyone can download)
         #[arg(long, conflicts_with = "rings")]
         open: bool,
     },
@@ -54,9 +54,12 @@ pub enum Cmd {
 
 #[derive(Subcommand)]
 pub enum RingCmd {
-    /// Create a new private ring and print its ID
-    New,
-    /// List all rings (open-ring is always listed first)
+    /// Create a new ring with the given name
+    New {
+        /// Name for the ring (e.g. "friends", "work-team")
+        name: String,
+    },
+    /// List all rings
     List,
     /// Add a peer to a ring
     Add {
@@ -76,58 +79,53 @@ pub enum RingCmd {
 
 pub fn run_ring(cmd: RingCmd, registry: Registry) -> Result<()> {
     match cmd {
-        RingCmd::New => {
-            let id = registry.create_ring()?;
-            println!("Ring created: {id}");
-            println!("Add peers: rdrop ring add {id} <peer-id>");
+        RingCmd::New { name } => {
+            registry.create_ring(&name)?;
+            println!("Ring created: {name}");
+            println!("Add peers: rdrop ring add {name} <peer-id>");
         }
         RingCmd::List => {
             let rings = registry.list_rings()?;
             println!("{} ring(s):", rings.len());
             for r in rings {
-                let members = registry.list_members(r)?;
                 if r.is_open() {
-                    println!("  {r}  — publicly accessible (no membership required)");
+                    println!("  {}  — publicly accessible (no membership required)", r.as_str());
                 } else {
-                    println!("  {r}  ({} member(s))", members.len());
+                    let members = registry.list_members(r.as_str())?;
+                    println!("  {}  ({} member(s))", r.as_str(), members.len());
                 }
             }
         }
         RingCmd::Add { ring, peer } => {
-            let rid = parse_ring_id(&ring)?;
-            if rid.is_open() {
-                println!("The open-ring has no membership list — everyone is welcome.");
+            if ring == OPEN_RING_NAME {
+                println!("The open ring has no membership list — everyone is welcome.");
                 return Ok(());
             }
             let peer = parse_peer_id(&peer)?;
-            registry.add_member(rid, peer)?;
-            println!("Added {peer} to ring {rid}");
+            registry.add_member(&ring, peer)?;
+            println!("Added {peer} to ring {ring}");
         }
         RingCmd::Remove { ring, peer } => {
-            let rid = parse_ring_id(&ring)?;
-            if rid.is_open() {
-                println!("The open-ring has no membership list to remove from.");
+            if ring == OPEN_RING_NAME {
+                println!("The open ring has no membership list to remove from.");
                 return Ok(());
             }
             let peer = parse_peer_id(&peer)?;
-            registry.remove_member(rid, peer)?;
-            println!("Removed {peer} from ring {rid}");
+            registry.remove_member(&ring, peer)?;
+            println!("Removed {peer} from ring {ring}");
         }
         RingCmd::Members { ring } => {
-            let rid = parse_ring_id(&ring)?;
-            if rid.is_open() {
-                println!(
-                    "The open-ring ({rid}) is public — any peer may access blobs tagged with it."
-                );
+            if ring == OPEN_RING_NAME {
+                println!("The open ring is public — any peer may access blobs tagged with it.");
                 return Ok(());
             }
-            let members = registry.list_members(rid)?;
+            let members = registry.list_members(&ring)?;
             if members.is_empty() {
-                println!("Ring {rid} has no members yet.");
-                println!("Add peers: rdrop ring add {rid} <peer-id>");
+                println!("Ring '{ring}' has no members yet.");
+                println!("Add peers: rdrop ring add {ring} <peer-id>");
                 println!("Peers print their PeerId with: rdrop id");
             } else {
-                println!("Ring {rid} — {} member(s):", members.len());
+                println!("Ring '{ring}' — {} member(s):", members.len());
                 for m in members {
                     println!("  {m}");
                 }
