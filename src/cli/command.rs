@@ -70,6 +70,9 @@ pub enum RingCmd {
         ring: String,
         #[arg(value_name = "PEER-ID")]
         peer: String,
+        /// Optional display label for this peer
+        #[arg(long)]
+        nickname: Option<String>,
     },
     /// Remove a peer from a ring
     Remove {
@@ -100,14 +103,17 @@ pub fn run_ring(cmd: RingCmd, registry: Registry) -> Result<()> {
                 }
             }
         }
-        RingCmd::Add { ring, peer } => {
+        RingCmd::Add { ring, peer, nickname } => {
             if ring == OPEN_RING_NAME {
                 println!("The open ring has no membership list — everyone is welcome.");
                 return Ok(());
             }
             let peer = parse_peer_id(&peer)?;
-            registry.add_member(&ring, peer)?;
-            println!("Added {peer} to ring {ring}");
+            registry.add_member(&ring, peer, nickname.as_deref())?;
+            match &nickname {
+                Some(nick) => println!("Added {peer} ({nick}) to ring {ring}"),
+                None => println!("Added {peer} to ring {ring}"),
+            }
         }
         RingCmd::Remove { ring, peer } => {
             if ring == OPEN_RING_NAME {
@@ -130,8 +136,11 @@ pub fn run_ring(cmd: RingCmd, registry: Registry) -> Result<()> {
                 println!("Peers print their PeerId with: rdrop id");
             } else {
                 println!("Ring '{ring}' — {} member(s):", members.len());
-                for m in members {
-                    println!("  {m}");
+                for (peer, nick) in members {
+                    match nick {
+                        Some(n) => println!("  {peer}  ({n})"),
+                        None => println!("  {peer}"),
+                    }
                 }
             }
         }

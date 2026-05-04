@@ -34,6 +34,10 @@ const RINGS: TableDefinition<&str, &[u8]> = TableDefinition::new("rings");
 /// Maps blob_hash (32 bytes) → NUL-separated ring names.
 const FILE_RINGS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("file_rings");
 
+/// Maps `ring_name \0 peer_id_bytes` → nickname string (display label only).
+/// Ring names are validated to contain no NUL, so the separator is unambiguous.
+const NICKNAMES: TableDefinition<&[u8], &str> = TableDefinition::new("nicknames");
+
 /// The persistent registry, cheaply cloneable via Arc.
 #[derive(Clone)]
 pub struct Registry(Arc<Database>);
@@ -48,6 +52,7 @@ impl Registry {
         {
             let mut rings = write.open_table(RINGS)?;
             write.open_table(FILE_RINGS)?;
+            write.open_table(NICKNAMES)?;
 
             if rings.get(OPEN_RING_NAME)?.is_none() {
                 rings.insert(OPEN_RING_NAME, encode_peer_ids(&[]).as_slice())?;
@@ -84,8 +89,9 @@ impl Registry {
         Ok(())
     }
 
-    /// Add a peer to a ring. Idempotent.
-    pub fn add_member(&self, ring: &str, peer: EndpointId) -> Result<()> {
+    /// Add a peer to a ring. Idempotent. `nickname` is a display-only label stored
+    /// alongside the peer; passing `Some` on a repeat call updates the label.
+    pub fn add_member(&self, ring: &str, peer: EndpointId, nickname: Option<&str>) -> Result<()> {
         let write = self.0.begin_write()?;
         {
             let mut table = write.open_table(RINGS)?;
@@ -98,12 +104,17 @@ impl Registry {
                 members.push(peer_bytes);
             }
             table.insert(ring, encode_peer_ids(&members).as_slice())?;
+
+            if let Some(nick) = nickname {
+                let mut nick_table = write.open_table(NICKNAMES)?;
+                nick_table.insert(nickname_key(ring, &peer).as_slice(), nick)?;
+            }
         }
         write.commit()?;
         Ok(())
     }
 
-    /// Remove a peer from a ring.
+    /// Remove a peer from a ring, also deleting their nickname entry if any.
     pub fn remove_member(&self, ring: &str, peer: EndpointId) -> Result<()> {
         let write = self.0.begin_write()?;
         {
@@ -115,20 +126,30 @@ impl Registry {
             let peer_bytes = *peer.as_bytes();
             members.retain(|b| b != &peer_bytes);
             table.insert(ring, encode_peer_ids(&members).as_slice())?;
+
+            let mut nick_table = write.open_table(NICKNAMES)?;
+            nick_table.remove(nickname_key(ring, &peer).as_slice())?;
         }
         write.commit()?;
         Ok(())
     }
 
-    /// List all members of a ring.
-    pub fn list_members(&self, ring: &str) -> Result<Vec<EndpointId>> {
+    /// List all members of a ring, each paired with their optional nickname.
+    pub fn list_members(&self, ring: &str) -> Result<Vec<(EndpointId, Option<String>)>> {
         let read = self.0.begin_read()?;
         let table = read.open_table(RINGS)?;
+        let nick_table = read.open_table(NICKNAMES)?;
         match table.get(ring)? {
             None => Err(anyhow!("ring '{}' not found", ring)),
             Some(v) => decode_peer_ids(v.value())
                 .into_iter()
-                .map(|b| EndpointId::from_bytes(&b).map_err(|e| anyhow!("{e}")))
+                .map(|b| {
+                    let peer = EndpointId::from_bytes(&b).map_err(|e| anyhow!("{e}"))?;
+                    let nick = nick_table
+                        .get(nickname_key(ring, &peer).as_slice())?
+                        .map(|v| v.value().to_owned());
+                    Ok((peer, nick))
+                })
                 .collect(),
         }
     }
@@ -238,6 +259,13 @@ impl Registry {
 
         Ok(false)
     }
+}
+
+fn nickname_key(ring: &str, peer: &EndpointId) -> Vec<u8> {
+    let mut key = ring.as_bytes().to_vec();
+    key.push(b'\0');
+    key.extend_from_slice(peer.as_bytes());
+    key
 }
 
 fn encode_peer_ids(ids: &[[u8; 32]]) -> Vec<u8> {
@@ -396,7 +424,7 @@ mod tests {
         reg.create_ring("friends").unwrap();
 
         reg.tag_file(hash, "friends").unwrap();
-        reg.add_member("friends", peer).unwrap();
+        reg.add_member("friends", peer, None).unwrap();
 
         assert!(reg.is_allowed(&peer, &hash).unwrap());
     }
@@ -410,8 +438,80 @@ mod tests {
         reg.create_ring("friends").unwrap();
 
         reg.tag_file(hash, "friends").unwrap();
-        reg.add_member("friends", member).unwrap();
+        reg.add_member("friends", member, None).unwrap();
 
         assert!(!reg.is_allowed(&stranger, &hash).unwrap());
+    }
+
+    // nickname
+
+    #[test]
+    fn nickname_stored_and_returned_by_list_members() {
+        let (reg, _dir) = make_registry();
+        let peer = make_peer_id();
+        reg.create_ring("friends").unwrap();
+
+        reg.add_member("friends", peer, Some("alice")).unwrap();
+
+        let members = reg.list_members("friends").unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].0, peer);
+        assert_eq!(members[0].1.as_deref(), Some("alice"));
+    }
+
+    #[test]
+    fn no_nickname_returns_none() {
+        let (reg, _dir) = make_registry();
+        let peer = make_peer_id();
+        reg.create_ring("friends").unwrap();
+
+        reg.add_member("friends", peer, None).unwrap();
+
+        let members = reg.list_members("friends").unwrap();
+        assert_eq!(members[0].1, None);
+    }
+
+    #[test]
+    fn nickname_updated_on_readd() {
+        let (reg, _dir) = make_registry();
+        let peer = make_peer_id();
+        reg.create_ring("friends").unwrap();
+
+        reg.add_member("friends", peer, Some("alice")).unwrap();
+        reg.add_member("friends", peer, Some("alice2")).unwrap();
+
+        let members = reg.list_members("friends").unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].1.as_deref(), Some("alice2"));
+    }
+
+    #[test]
+    fn nickname_removed_with_peer() {
+        let (reg, _dir) = make_registry();
+        let peer = make_peer_id();
+        reg.create_ring("friends").unwrap();
+
+        reg.add_member("friends", peer, Some("alice")).unwrap();
+        reg.remove_member("friends", peer).unwrap();
+        reg.add_member("friends", peer, None).unwrap();
+
+        let members = reg.list_members("friends").unwrap();
+        assert_eq!(members[0].1, None);
+    }
+
+    #[test]
+    fn nicknames_are_per_ring() {
+        let (reg, _dir) = make_registry();
+        let peer = make_peer_id();
+        reg.create_ring("friends").unwrap();
+        reg.create_ring("work").unwrap();
+
+        reg.add_member("friends", peer, Some("alice")).unwrap();
+        reg.add_member("work", peer, Some("bob")).unwrap();
+
+        let friends = reg.list_members("friends").unwrap();
+        let work = reg.list_members("work").unwrap();
+        assert_eq!(friends[0].1.as_deref(), Some("alice"));
+        assert_eq!(work[0].1.as_deref(), Some("bob"));
     }
 }
