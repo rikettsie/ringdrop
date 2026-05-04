@@ -158,6 +158,19 @@ impl Registry {
         Ok(ids)
     }
 
+    /// Return all rings a blob is tagged with.
+    pub fn file_rings(&self, hash: Hash) -> Result<Vec<RingId>> {
+        let read = self.0.begin_read()?;
+        let table = read.open_table(FILE_RINGS)?;
+        match table.get(hash.as_bytes().as_slice())? {
+            None => Ok(Vec::new()),
+            Some(v) => Ok(decode_ring_ids(v.value())
+                .into_iter()
+                .map(RingId::from_bytes)
+                .collect()),
+        }
+    }
+
     /// Tag a blob hash with a ring.
     ///
     /// Mutual-exclusion rules (enforced here, not just at the CLI):

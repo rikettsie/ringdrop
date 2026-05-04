@@ -37,6 +37,7 @@ use tracing::info;
 use walkdir::WalkDir;
 
 use super::protocol::{encode_ranges_wire, RingGate, Status, SC_ALPN};
+use crate::config::Config;
 use crate::registry::Registry;
 use crate::ticket::ShareTicket;
 
@@ -52,7 +53,10 @@ impl Node {
         let data_dir = data_dir.as_ref().to_path_buf();
         tokio::fs::create_dir_all(&data_dir).await?;
 
-        let endpoint = Endpoint::bind(presets::N0)
+        let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+        let endpoint = Endpoint::builder(presets::N0)
+            .secret_key(cfg.secret_key)
+            .bind()
             .await
             .context("binding iroh endpoint")?;
 

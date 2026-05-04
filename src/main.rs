@@ -2,6 +2,7 @@ use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
 mod cli;
+mod config;
 mod core;
 mod registry;
 mod ticket;
