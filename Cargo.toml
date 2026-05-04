@@ -1,0 +1,43 @@
+[package]
+name = "ringdrop"
+version = "0.1.0"
+edition = "2021"
+authors = ["Enrico Fusto"]
+license = "MIT"
+description = "P2P file transfer with ring-based access control, built on iroh-blobs verified streaming"
+
+[[bin]]
+name = "rdrop"
+path = "src/main.rs"
+
+[dependencies]
+# Core components: transport protocol, chunking, concurrency
+iroh = "0.98.2"
+iroh-blobs = { version = "0.100", features = ["fs-store"] }
+iroh-io = "0.6"
+bao-tree = "0.16"
+bytes = "1"
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Storage
+redb = "2"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Other utilities
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+data-encoding = "2"           # base32 for human-friendly ticket display
+walkdir = "2"                 # directory traversal for multi-file send
+futures-lite = "2"
+dirs-next = "2"               # home directory for default data path
+
+[dev-dependencies]
+tempfile = "3"
