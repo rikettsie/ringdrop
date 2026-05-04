@@ -91,7 +91,7 @@ pub async fn run() -> Result<()> {
             command::run_ring(ring_cmd, registry)?;
         }
 
-        Cmd::Share { path, name } => {
+        Cmd::Share { path, name, oneshot } => {
             let node = Node::start(&data_dir).await?;
             let (hash, format) = import_path(&node, &path).await?;
 
@@ -111,9 +111,20 @@ pub async fn run() -> Result<()> {
             println!("  rdrop tag {} --ring <ring-name>  # private ring", path.display());
             println!("  rdrop tag {} --open               # anyone", path.display());
             println!();
-            println!("Serving… (Ctrl-C to stop)");
+            if oneshot {
+                println!("Serving… (exits after first successful transfer, or Ctrl-C to stop)");
+                let transfer_done = node.transfer_done();
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {},
+                    _ = transfer_done.notified() => {
+                        println!("Transfer complete. Exiting.");
+                    },
+                }
+            } else {
+                println!("Serving… (Ctrl-C to stop)");
+                tokio::signal::ctrl_c().await?;
+            }
 
-            tokio::signal::ctrl_c().await?;
             node.shutdown().await?;
         }
 

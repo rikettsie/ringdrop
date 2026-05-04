@@ -19,6 +19,9 @@ pub enum Cmd {
         /// Optional human-readable name embedded in the ticket
         #[arg(long)]
         name: Option<String>,
+        /// Exit after the first successful transfer
+        #[arg(long)]
+        oneshot: bool,
     },
 
     /// Download a file from a ringdrop ticket (automatically resumes if interrupted)

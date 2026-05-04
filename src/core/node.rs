@@ -22,7 +22,10 @@
 //! 5. If the connection drops again, step 1 picks up from the last committed
 //!    chunk group — no already-verified data is re-transferred.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{bail, Context, Result};
 use bao_tree::ChunkRanges;
@@ -33,7 +36,8 @@ use iroh_blobs::{
     store::fs::FsStore,
     BlobFormat, BlobsProtocol, Hash,
 };
-use tracing::{debug, info};
+use tokio::sync::Notify;
+use tracing::info;
 use walkdir::WalkDir;
 
 use super::protocol::{encode_ranges_wire, RingGate, Status, SC_ALPN};
@@ -46,6 +50,7 @@ pub struct Node {
     pub store: FsStore,
     pub registry: Registry,
     router: Router,
+    transfer_done: Arc<Notify>,
 }
 
 impl Node {
@@ -71,7 +76,7 @@ impl Node {
         let registry =
             Registry::open(data_dir.join("registry.redb")).context("opening registry")?;
 
-        let gate = RingGate::new(registry.clone(), store.clone());
+        let (gate, transfer_done) = RingGate::new(registry.clone(), store.clone());
         let blobs_proto = BlobsProtocol::new(&store, None);
 
         let router = Router::builder(endpoint.clone())
@@ -87,6 +92,7 @@ impl Node {
             store,
             registry,
             router,
+            transfer_done,
         })
     }
 
@@ -95,6 +101,9 @@ impl Node {
     }
     pub fn node_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
+    }
+    pub fn transfer_done(&self) -> Arc<Notify> {
+        self.transfer_done.clone()
     }
 
     pub async fn import_file(&self, path: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
@@ -185,7 +194,6 @@ impl Node {
             Ok(BlobStatus::Complete { .. }) => ChunkRanges::all(),
             _ => ChunkRanges::default(),
         };
-        debug!("blob status checked");
 
         let missing = ChunkRanges::all() & !already_have.clone();
         if missing.is_empty() {
@@ -199,10 +207,8 @@ impl Node {
             .connect(node_addr, SC_ALPN)
             .await
             .context("connecting to sender")?;
-        debug!("connection established");
 
         let (mut send, mut recv) = conn.open_bi().await?;
-        debug!("stream opened");
         send.write_all(hash.as_bytes()).await?;
         send.write_all(&encode_ranges_wire(&already_have)).await?;
         send.finish()?;

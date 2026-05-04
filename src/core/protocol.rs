@@ -20,7 +20,7 @@
 //!            enabling the receiver to verify each chunk independently.
 //! ```
 
-use std::{fmt, io};
+use std::{fmt, io, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use bao_tree::{ChunkNum, ChunkRanges};
@@ -32,6 +32,7 @@ use iroh::{
 };
 use iroh_blobs::{store::fs::FsStore, Hash};
 use iroh_io::AsyncStreamWriter;
+use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
 use crate::registry::Registry;
@@ -117,6 +118,7 @@ fn decode_ranges_wire(count: u32, raw: &[u8]) -> Result<ChunkRanges> {
 pub(super) struct RingGate {
     registry: Registry,
     store: FsStore,
+    transfer_done: Arc<Notify>,
 }
 
 impl fmt::Debug for RingGate {
@@ -126,8 +128,14 @@ impl fmt::Debug for RingGate {
 }
 
 impl RingGate {
-    pub(super) fn new(registry: Registry, store: FsStore) -> Self {
-        RingGate { registry, store }
+    pub(super) fn new(registry: Registry, store: FsStore) -> (Self, Arc<Notify>) {
+        let transfer_done = Arc::new(Notify::new());
+        let gate = RingGate {
+            registry,
+            store,
+            transfer_done: transfer_done.clone(),
+        };
+        (gate, transfer_done)
     }
 }
 
@@ -210,6 +218,7 @@ impl RingGate {
         send.finish()?;
 
         info!(%peer, %hash, "done");
+        self.transfer_done.notify_one();
         Ok(())
     }
 }
