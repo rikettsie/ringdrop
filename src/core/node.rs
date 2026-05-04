@@ -185,7 +185,6 @@ impl Node {
             .store
             .blobs()
             .observe(hash)
-            .await_completion()
             .await
             .map(|bf| bf.ranges)
             .unwrap_or_default();
