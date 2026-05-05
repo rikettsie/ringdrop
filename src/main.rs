@@ -1,13 +1,6 @@
 use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
-mod cli;
-mod config;
-mod core;
-mod registry;
-mod ticket;
-mod util;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     fmt()
@@ -19,5 +12,5 @@ async fn main() -> Result<()> {
         .compact()
         .init();
 
-    cli::run().await
+    ringdrop::cli::run().await
 }
