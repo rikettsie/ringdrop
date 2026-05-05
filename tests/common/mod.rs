@@ -1,0 +1,28 @@
+use std::path::Path;
+
+use ringdrop::core::Node;
+use tempfile::TempDir;
+use tokio::fs;
+
+pub struct TestNode {
+    pub node: Node,
+    _dir: TempDir,
+}
+
+impl TestNode {
+    pub async fn start() -> Self {
+        let dir = TempDir::new().expect("tempdir");
+        let node = Node::start(dir.path()).await.expect("node start");
+        TestNode { node, _dir: dir }
+    }
+
+    pub async fn shutdown(self) {
+        self.node.shutdown().await.expect("node shutdown");
+    }
+}
+
+pub async fn write_file(dir: &Path, name: &str, content: &[u8]) -> std::path::PathBuf {
+    let path = dir.join(name);
+    fs::write(&path, content).await.expect("write test file");
+    path
+}
