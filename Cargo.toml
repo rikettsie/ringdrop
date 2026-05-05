@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["Enrico Fusto"]
 license = "MIT"
 description = "P2P file transfer with ring-based access control, built on iroh-blobs verified streaming"
+repository = "https://github.com/rikettsie/ringdrop"
 
 [[bin]]
 name = "rdrop"
