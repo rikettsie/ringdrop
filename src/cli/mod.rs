@@ -12,18 +12,20 @@
 //! rdrop ring add friends <peer-id>     # add a peer to a ring
 //! rdrop ring members friends
 //!
-//! # Share a file and get a ticket
-//! rdrop share file.txt
-//! rdrop share file.txt --name "my report"
+//! # Import a file and get a ticket
+//! rdrop import file.txt                              # untagged — warns until tagged
+//! rdrop import file.txt --open                       # publicly accessible
+//! rdrop import file.txt --name "my report" --tag friends
+//!
+//! # Re-tag a blob at any time
+//! rdrop tag file.txt --ring friends
+//! rdrop tag <hash> --open
+//!
+//! # Start serving all authorised blobs
+//! rdrop serve
 //!
 //! # Receive — resumes automatically if interrupted
 //! rdrop receive rdrop://ABCDEF... [--dest ./downloads]
-//!
-//! # Grant access to a shared file (by path or hash)
-//! rdrop tag file.txt --ring friends
-//! rdrop tag file.txt --open
-//! rdrop tag <hash> --ring friends
-//! rdrop tag <hash> --open
 //! ```
 
 mod command;
@@ -94,13 +96,37 @@ pub async fn run() -> Result<()> {
             command::run_ring(ring_cmd, registry)?;
         }
 
-        Cmd::Share {
-            path,
-            name,
-            oneshot,
-        } => {
+        Cmd::Import { path, name, tag, open } => {
             let node = Node::start(&data_dir).await?;
             let (hash, format) = import_path(&node, &path).await?;
+
+            let tag = if open { Some(OPEN_RING_NAME.to_owned()) } else { tag };
+
+            if let Some(ref ring) = tag {
+                node.registry.tag_file(hash, ring)?;
+                if ring == OPEN_RING_NAME {
+                    println!("Tagged as open (publicly accessible)");
+                } else {
+                    println!("Tagged with ring '{ring}'");
+                }
+            } else {
+                let rings = node.registry.file_rings(hash)?;
+                if rings.is_empty() {
+                    println!("Warning: not tagged — this blob won't be served to any peer.");
+                    println!("Tag it with:");
+                    println!("  rdrop tag {hash} --ring <ring-name>");
+                    println!("  rdrop tag {hash} --open");
+                } else {
+                    println!("Already tagged:");
+                    for r in &rings {
+                        if r.is_open() {
+                            println!("  {} (open — publicly accessible)", r.as_str());
+                        } else {
+                            println!("  {}", r.as_str());
+                        }
+                    }
+                }
+            }
 
             let display_name =
                 name.or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()));
@@ -108,36 +134,21 @@ pub async fn run() -> Result<()> {
             let ticket_str = ticket.to_uri()?;
 
             println!();
-            println!("Ticket (give this to peers):");
+            println!("Ticket:");
             println!("  {ticket_str}");
             println!();
-            println!("They can receive the file with:");
+            println!("Run `rdrop serve` to start accepting connections.");
+            println!("Peers receive with:");
             println!("  rdrop receive {ticket_str}");
-            println!();
-            println!("Grant access with:");
-            println!(
-                "  rdrop tag {} --ring <ring-name>  # private ring",
-                path.display()
-            );
-            println!(
-                "  rdrop tag {} --open               # anyone",
-                path.display()
-            );
-            println!();
-            if oneshot {
-                println!("Serving… (exits after first successful transfer, or Ctrl-C to stop)");
-                let transfer_done = node.transfer_done();
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {},
-                    _ = transfer_done.notified() => {
-                        println!("Transfer complete. Exiting.");
-                    },
-                }
-            } else {
-                println!("Serving… (Ctrl-C to stop)");
-                tokio::signal::ctrl_c().await?;
-            }
 
+            node.shutdown().await?;
+        }
+
+        Cmd::Serve => {
+            let node = Node::start(&data_dir).await?;
+            println!("Node online. Peer ID: {}", node.peer_id());
+            println!("Serving all authorised blobs — Ctrl-C to stop.");
+            tokio::signal::ctrl_c().await?;
             node.shutdown().await?;
         }
 

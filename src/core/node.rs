@@ -22,10 +22,7 @@
 //! 5. If the connection drops again, step 1 picks up from the last committed
 //!    chunk group — no already-verified data is re-transferred.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use bao_tree::ChunkRanges;
@@ -36,7 +33,6 @@ use iroh_blobs::{
     store::fs::FsStore,
     BlobFormat, BlobsProtocol, Hash,
 };
-use tokio::sync::Notify;
 use tracing::info;
 use walkdir::WalkDir;
 
@@ -50,7 +46,6 @@ pub struct Node {
     pub store: FsStore,
     pub registry: Registry,
     router: Router,
-    transfer_done: Arc<Notify>,
 }
 
 impl Node {
@@ -76,7 +71,7 @@ impl Node {
         let registry = Registry::open(data_dir.join("registry.redb"), endpoint.id())
             .context("opening registry")?;
 
-        let (gate, transfer_done) = RingGate::new(registry.clone(), store.clone());
+        let gate = RingGate::new(registry.clone(), store.clone());
         let blobs_proto = BlobsProtocol::new(&store, None);
 
         let router = Router::builder(endpoint.clone())
@@ -92,7 +87,6 @@ impl Node {
             store,
             registry,
             router,
-            transfer_done,
         })
     }
 
@@ -101,9 +95,6 @@ impl Node {
     }
     pub fn node_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
-    }
-    pub fn transfer_done(&self) -> Arc<Notify> {
-        self.transfer_done.clone()
     }
 
     pub async fn import_file(&self, path: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
