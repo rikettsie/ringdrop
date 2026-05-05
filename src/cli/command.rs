@@ -12,17 +12,24 @@ pub enum Cmd {
     #[command(subcommand)]
     Ring(RingCmd),
 
-    /// Import a file/directory and print a ringdrop ticket
-    Share {
-        /// Path to share (file or directory)
+    /// Manage blobs (import, list, remove)
+    #[command(subcommand)]
+    Blob(BlobCmd),
+
+    /// Import a file/directory into the blob store and print a ticket (shortcut for `blob import`)
+    Import {
+        /// Path to import (file or directory)
         path: PathBuf,
-        /// Optional human-readable name embedded in the ticket
-        #[arg(long)]
-        name: Option<String>,
-        /// Exit after the first successful transfer
-        #[arg(long)]
-        oneshot: bool,
+        /// Ring to tag the blob with; if omitted the blob won't be served until tagged
+        #[arg(long, conflicts_with = "open")]
+        tag: Option<String>,
+        /// Tag as publicly accessible (anyone can download); shorthand for --tag open
+        #[arg(long, conflicts_with = "tag")]
+        open: bool,
     },
+
+    /// Start the node and serve all authorised blobs until Ctrl-C
+    Serve,
 
     /// Download a file from a ringdrop ticket (automatically resumes if interrupted)
     Receive {
@@ -54,6 +61,28 @@ pub enum Cmd {
 
     /// Print your PeerId so others can add you to their rings
     Id,
+}
+
+#[derive(Subcommand)]
+pub enum BlobCmd {
+    /// Import a file/directory into the blob store and print a ticket
+    Import {
+        /// Path to import (file or directory)
+        path: PathBuf,
+        /// Ring to tag the blob with; if omitted the blob won't be served until tagged
+        #[arg(long, conflicts_with = "open")]
+        tag: Option<String>,
+        /// Tag as publicly accessible (anyone can download); shorthand for --tag open
+        #[arg(long, conflicts_with = "tag")]
+        open: bool,
+    },
+    /// Remove a blob from the local store and all its ring tags
+    Remove {
+        /// File path or BLAKE3 hash (hex)
+        target: String,
+    },
+    /// List all local blobs with their ring tags and share ticket
+    List,
 }
 
 #[derive(Subcommand)]

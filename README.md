@@ -16,9 +16,13 @@ Transfers resume automatically if interrupted — no verified data is re-transfe
 
 ## Install
 
+To build the binary in release mode and install it in your OS default path (e.g. `~/.cargo/bin/rdrop` on Linux and macOS), just run:
+
 ```sh
 cargo install --path .
 ```
+
+After that, `rdrop` is callable from anywhere in the shell without any further configuration.
 
 ## Usage
 
@@ -33,32 +37,66 @@ rdrop id
 ### Manage rings
 
 ```sh
-rdrop ring new                            # create a private ring
-rdrop ring list                           # list all rings
-rdrop ring add <ring-id> <peer-id>        # add a peer to a ring
-rdrop ring remove <ring-id> <peer-id>     # remove a peer from a ring
-rdrop ring members <ring-id>              # list peers of a ring
+rdrop ring new <name>                                        # create a private ring
+rdrop ring list                                              # list all rings
+rdrop ring add <ring-name> <peer-id>                         # add a peer to a ring
+rdrop ring add <ring-name> <peer-id> --nickname "Alice"      # with a display label
+rdrop ring remove <ring-name> <peer-id>                      # remove a peer
+rdrop ring members <ring-name>                               # list peers of a ring
 ```
 
-### Share a file
+### Import and manage files (blobs)
+
+`rdrop blob` groups all blob lifecycle operations. `rdrop import` is a shortcut for `rdrop blob import`.
+
+**Import** a file or directory into the local blob store and get a ticket:
 
 ```sh
-rdrop share file.txt
-rdrop share file.txt --name "my report"
+rdrop import file.txt                    # shortcut — warns if untagged
+rdrop import file.txt --open             # publicly accessible
+rdrop import file.txt --tag friends      # restrict to a ring
+
+rdrop blob import file.txt --open        # same, via blob subcommand
 ```
 
-This imports the file, prints an `rdrop://` ticket, and keeps the node running to serve downloads. Press `Ctrl-C` to stop serving.
+If no `--tag` or `--open` is given and the file has no existing tags, a warning is printed — the blob won't be transferred until it is tagged.
+If the file was already imported, the existing rings are summarised instead.
 
-### Grant access
-
-Access control is managed separately from sharing. Tag a file with a ring to grant access to its members, or mark it open so anyone with the ticket can download it.
+**List** all local blobs with their ring tags and share ticket:
 
 ```sh
-rdrop tag file.txt --ring <uuid>   # restrict to a ring
-rdrop tag file.txt --open          # anyone with the ticket
-rdrop tag <hash>    --ring <uuid>  # same, by hash
-rdrop tag <hash>    --open
+rdrop blob list
 ```
+
+**Remove** a blob from the local store and all its ring tags:
+
+```sh
+rdrop blob remove file.txt
+rdrop blob remove <hash>
+```
+
+Disk space is reclaimed on the next `rdrop serve` run (GC cycle).
+
+### Grant or change access
+
+Tag a file with a ring at any time — before or after importing.
+
+```sh
+rdrop tag file.txt --ring friends   # restrict to a ring
+rdrop tag file.txt --open           # anyone with the ticket
+rdrop tag <hash>   --ring friends   # same, by BLAKE3 hash
+rdrop tag <hash>   --open
+```
+
+### Serve
+
+Start the node and serve all authorised blobs until `Ctrl-C`:
+
+```sh
+rdrop serve
+```
+
+Keep this running while peers download. The same node serves every blob that has been tagged — there is no per-file serving step.
 
 ### Receive a file
 
@@ -67,6 +105,17 @@ rdrop receive rdrop://ABCDEF... [--dest ./downloads]
 ```
 
 Re-run the same command to resume an interrupted transfer.
+
+## Activate more logging
+
+By default only warnings are printed. Set `RUST_LOG` to get more detail:
+
+```sh
+RUST_LOG=ringdrop=info rdrop serve      # info-level logs for all ringdrop code
+RUST_LOG=debug rdrop serve              # debug logs including iroh internals
+```
+
+This applies to every command, not just `serve`.
 
 ## How it works
 

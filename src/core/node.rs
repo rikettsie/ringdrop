@@ -22,21 +22,19 @@
 //! 5. If the connection drops again, step 1 picks up from the last committed
 //!    chunk group — no already-verified data is re-transferred.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use bao_tree::ChunkRanges;
+use futures_lite::StreamExt;
 use iroh::{endpoint::presets, protocol::Router, Endpoint, EndpointAddr, EndpointId};
 use iroh_blobs::{
     api::blobs::{AddPathOptions, BlobStatus, ImportMode},
     format::collection::Collection,
-    store::fs::FsStore,
-    BlobFormat, BlobsProtocol, Hash,
+    store::{fs::FsStore, GcConfig},
+    BlobFormat, Hash, HashAndFormat,
 };
-use tokio::sync::Notify;
+use std::time::Duration;
 use tracing::info;
 use walkdir::WalkDir;
 
@@ -50,7 +48,6 @@ pub struct Node {
     pub store: FsStore,
     pub registry: Registry,
     router: Router,
-    transfer_done: Arc<Notify>,
 }
 
 impl Node {
@@ -71,17 +68,23 @@ impl Node {
         //   <hash>.obao4    — flattened BLAKE3 hash tree (16 KiB chunk groups)
         //   <hash>.bitfield — bitmask of validated chunk groups (crash-safe)
         let blobs_dir = data_dir.join("blobs");
-        let store = FsStore::load(&blobs_dir).await.context("loading FsStore")?;
+        let db_path = blobs_dir.join("blobs.db");
+        let mut fs_opts = iroh_blobs::store::fs::options::Options::new(&blobs_dir);
+        fs_opts.gc = Some(GcConfig {
+            interval: Duration::from_secs(30),
+            add_protected: None,
+        });
+        let store = FsStore::load_with_opts(db_path, fs_opts)
+            .await
+            .context("loading FsStore")?;
 
         let registry = Registry::open(data_dir.join("registry.redb"), endpoint.id())
             .context("opening registry")?;
 
-        let (gate, transfer_done) = RingGate::new(registry.clone(), store.clone());
-        let blobs_proto = BlobsProtocol::new(&store, None);
+        let gate = RingGate::new(registry.clone(), store.clone());
 
         let router = Router::builder(endpoint.clone())
             .accept(SC_ALPN, gate)
-            .accept(iroh_blobs::ALPN, blobs_proto)
             .spawn();
 
         endpoint.online().await;
@@ -92,7 +95,6 @@ impl Node {
             store,
             registry,
             router,
-            transfer_done,
         })
     }
 
@@ -101,9 +103,6 @@ impl Node {
     }
     pub fn node_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
-    }
-    pub fn transfer_done(&self) -> Arc<Notify> {
-        self.transfer_done.clone()
     }
 
     pub async fn import_file(&self, path: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
@@ -120,8 +119,16 @@ impl Node {
             .temp_tag()
             .await
             .context("add_path")?;
-        info!(hash = %tag.hash(), "imported — outboard computed");
-        Ok((tag.hash(), BlobFormat::Raw))
+        let hash = tag.hash();
+        let format = BlobFormat::Raw;
+        // Persist: replace temp tag with a named tag so GC won't collect this blob.
+        self.store
+            .tags()
+            .set(hash.to_string(), HashAndFormat { hash, format })
+            .await
+            .context("pinning blob tag")?;
+        info!(%hash, "imported — outboard computed");
+        Ok((hash, format))
     }
 
     pub async fn import_directory(&self, dir: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
@@ -161,8 +168,38 @@ impl Node {
         }
 
         let col_tag = collection.store(&self.store).await?;
-        info!(hash = %col_tag.hash(), "collection stored");
-        Ok((col_tag.hash(), BlobFormat::HashSeq))
+        let hash = col_tag.hash();
+        let format = BlobFormat::HashSeq;
+        // Persist: named tag on the collection; GC follows HashSeq refs to keep member blobs.
+        self.store
+            .tags()
+            .set(hash.to_string(), HashAndFormat { hash, format })
+            .await
+            .context("pinning collection tag")?;
+        info!(%hash, "collection stored");
+        Ok((hash, format))
+    }
+
+    /// List all blobs that have been imported (hash + format).
+    pub async fn list_blobs(&self) -> Result<Vec<(Hash, BlobFormat)>> {
+        let mut stream = self.store.tags().list().await?;
+        let mut blobs = Vec::new();
+        while let Some(item) = stream.next().await {
+            let info = item?;
+            blobs.push((info.hash, info.format));
+        }
+        Ok(blobs)
+    }
+
+    /// Remove a blob from the store. Ring tags must be removed separately via the registry.
+    /// Actual disk reclamation happens on the next GC cycle (during `rdrop serve`).
+    pub async fn delete_blob(&self, hash: Hash) -> Result<()> {
+        self.store
+            .tags()
+            .delete(hash.to_string())
+            .await
+            .context("removing blob tag")?;
+        Ok(())
     }
 
     pub fn make_ticket(&self, hash: Hash, format: BlobFormat, name: Option<String>) -> ShareTicket {

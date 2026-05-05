@@ -183,6 +183,17 @@ impl Registry {
         Ok(ids)
     }
 
+    /// Remove all ring tags for a blob (used when deleting a blob).
+    pub fn remove_file_tags(&self, hash: Hash) -> Result<()> {
+        let write = self.db.begin_write()?;
+        {
+            let mut table = write.open_table(FILE_RINGS)?;
+            table.remove(hash.as_bytes().as_slice())?;
+        }
+        write.commit()?;
+        Ok(())
+    }
+
     /// Return all rings a blob is tagged with.
     pub fn file_rings(&self, hash: Hash) -> Result<Vec<RingId>> {
         let read = self.db.begin_read()?;
