@@ -50,10 +50,9 @@ rdrop ring members <ring-name>                               # list peers of a r
 `import` adds the file to the blob store and prints an `rdrop://` ticket. It exits immediately — serving is a separate step.
 
 ```sh
-rdrop import file.txt                              # warns if untagged
-rdrop import file.txt --open                       # publicly accessible
-rdrop import file.txt --tag friends                # restrict to a ring
-rdrop import file.txt --name "my report" --open    # custom ticket name
+rdrop import file.txt              # warns if untagged
+rdrop import file.txt --open       # publicly accessible
+rdrop import file.txt --tag friends   # restrict to a ring
 ```
 
 If no `--tag` or `--open` is given and the file has no existing tags, a warning is printed — the blob won't be transferred until it is tagged.

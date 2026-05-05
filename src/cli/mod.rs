@@ -13,9 +13,9 @@
 //! rdrop ring members friends
 //!
 //! # Import a file and get a ticket
-//! rdrop import file.txt                              # untagged — warns until tagged
-//! rdrop import file.txt --open                       # publicly accessible
-//! rdrop import file.txt --name "my report" --tag friends
+//! rdrop import file.txt                   # untagged — warns until tagged
+//! rdrop import file.txt --open            # publicly accessible
+//! rdrop import file.txt --tag friends     # restrict to a ring
 //!
 //! # Re-tag a blob at any time
 //! rdrop tag file.txt --ring friends
@@ -96,11 +96,15 @@ pub async fn run() -> Result<()> {
             command::run_ring(ring_cmd, registry)?;
         }
 
-        Cmd::Import { path, name, tag, open } => {
+        Cmd::Import { path, tag, open } => {
             let node = Node::start(&data_dir).await?;
             let (hash, format) = import_path(&node, &path).await?;
 
-            let tag = if open { Some(OPEN_RING_NAME.to_owned()) } else { tag };
+            let tag = if open {
+                Some(OPEN_RING_NAME.to_owned())
+            } else {
+                tag
+            };
 
             if let Some(ref ring) = tag {
                 node.registry.tag_file(hash, ring)?;
@@ -128,8 +132,7 @@ pub async fn run() -> Result<()> {
                 }
             }
 
-            let display_name =
-                name.or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()));
+            let display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
             let ticket = node.make_ticket(hash, format, display_name);
             let ticket_str = ticket.to_uri()?;
 

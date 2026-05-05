@@ -16,9 +16,6 @@ pub enum Cmd {
     Import {
         /// Path to import (file or directory)
         path: PathBuf,
-        /// Optional human-readable name embedded in the ticket
-        #[arg(long)]
-        name: Option<String>,
         /// Ring to tag the blob with; if omitted the blob won't be served until tagged
         #[arg(long, conflicts_with = "open")]
         tag: Option<String>,
