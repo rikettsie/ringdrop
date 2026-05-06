@@ -7,6 +7,10 @@ license = "MIT"
 description = "P2P streamed file transfer with ring-based access control, built on iroh and bao protocols"
 repository = "https://github.com/rikettsie/ringdrop"
 
+[lib]
+name = "ringdrop"
+path = "src/lib.rs"
+
 [[bin]]
 name = "rdrop"
 path = "src/main.rs"
