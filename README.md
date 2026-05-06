@@ -93,12 +93,12 @@ rdrop tag <hash>   --ring <ring-name>   # same, by BLAKE3 hash
 rdrop tag <hash>   --open
 ```
 
-### Serve
+### Share
 
-Start the sharing node and serve all authorised blobs until `Ctrl-C`:
+Start the sharing node and make all authorised blobs available until `Ctrl-C`:
 
 ```sh
-rdrop serve
+rdrop share
 ```
 
 Keep this running while peers download. The same node serves every blob that has been tagged — there is no per-file serving step.
@@ -116,11 +116,11 @@ Re-run the same command to resume an interrupted transfer.
 By default only warnings are printed. Set `RUST_LOG` to get more detail:
 
 ```sh
-RUST_LOG=ringdrop=info rdrop serve      # info-level logs for all ringdrop code
-RUST_LOG=debug rdrop serve              # debug logs including iroh internals
+RUST_LOG=ringdrop=info rdrop share      # info-level logs for all ringdrop code
+RUST_LOG=debug rdrop share              # debug logs including iroh internals
 ```
 
-This applies to every command, not just `serve`.
+This applies to every command, not just `share`.
 
 ## Dependencies
 

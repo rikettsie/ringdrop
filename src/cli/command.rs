@@ -28,8 +28,8 @@ pub enum Cmd {
         open: bool,
     },
 
-    /// Start the node and serve all authorised blobs until Ctrl-C
-    Serve,
+    /// Start the node and share all authorised blobs until Ctrl-C
+    Share,
 
     /// Download a file from a ringdrop ticket (automatically resumes if interrupted)
     Receive {

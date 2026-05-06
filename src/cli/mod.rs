@@ -28,7 +28,7 @@
 //! rdrop tag <hash> --open
 //!
 //! # Start serving all authorised blobs
-//! rdrop serve
+//! rdrop share
 //!
 //! # Receive — resumes automatically if interrupted
 //! rdrop receive rdrop://ABCDEF... [--dest ./downloads]
@@ -134,7 +134,7 @@ async fn run_import(node: &Node, path: PathBuf, tag: Option<String>, open: bool)
     println!("Ticket:");
     println!("  {ticket_str}");
     println!();
-    println!("Run `rdrop serve` to start accepting connections.");
+    println!("Run `rdrop share` to start accepting connections.");
     println!("Peers receive with:");
     println!("  rdrop receive {ticket_str}");
 
@@ -181,7 +181,7 @@ pub async fn run() -> Result<()> {
                 node.registry.remove_file_tags(hash)?;
                 node.delete_blob(hash).await?;
                 println!("Removed {hash}");
-                println!("Disk space will be reclaimed on the next `rdrop serve` run.");
+                println!("Disk space will be reclaimed on the next `rdrop share` run.");
                 node.shutdown().await?;
             }
 
@@ -218,10 +218,10 @@ pub async fn run() -> Result<()> {
             node.shutdown().await?;
         }
 
-        Cmd::Serve => {
+        Cmd::Share => {
             let node = Node::start(&data_dir).await?;
             println!("Node online. Peer ID: {}", node.peer_id());
-            println!("Serving all authorised blobs — Ctrl-C to stop.");
+            println!("Sharing all authorised blobs — Ctrl-C to stop.");
             tokio::signal::ctrl_c().await?;
             node.shutdown().await?;
         }

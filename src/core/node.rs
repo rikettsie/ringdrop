@@ -192,7 +192,7 @@ impl Node {
     }
 
     /// Remove a blob from the store. Ring tags must be removed separately via the registry.
-    /// Actual disk reclamation happens on the next GC cycle (during `rdrop serve`).
+    /// Actual disk reclamation happens on the next GC cycle (during `rdrop share`).
     pub async fn delete_blob(&self, hash: Hash) -> Result<()> {
         self.store
             .tags()
