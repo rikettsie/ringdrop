@@ -187,3 +187,52 @@ pub fn run_ring(cmd: RingCmd, registry: Registry, public_id: EndpointId) -> Resu
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::registry::Registry;
+
+    fn setup() -> (Registry, EndpointId, TempDir) {
+        let dir = TempDir::new().unwrap();
+        let registry = Registry::open(dir.path().join("test.redb")).unwrap();
+        let public_id = iroh::SecretKey::generate().public();
+        (registry, public_id, dir)
+    }
+
+    #[test]
+    fn ring_add_self_is_rejected() {
+        let (registry, public_id, _dir) = setup();
+        registry.create_ring("friends").unwrap();
+        let err = run_ring(
+            RingCmd::Add {
+                ring: "friends".into(),
+                peer: public_id.to_string(),
+                nickname: None,
+            },
+            registry,
+            public_id,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("yourself"));
+    }
+
+    #[test]
+    fn ring_add_to_open_ring_does_not_add_member() {
+        let (registry, public_id, _dir) = setup();
+        let peer = iroh::SecretKey::generate().public();
+        run_ring(
+            RingCmd::Add {
+                ring: OPEN_RING_NAME.into(),
+                peer: peer.to_string(),
+                nickname: None,
+            },
+            registry.clone(),
+            public_id,
+        )
+        .unwrap();
+        assert_eq!(registry.list_members(OPEN_RING_NAME).unwrap().len(), 0);
+    }
+}
