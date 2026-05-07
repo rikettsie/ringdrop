@@ -26,7 +26,7 @@ use std::{path::Path, sync::Arc};
 use anyhow::{anyhow, Result};
 use iroh::EndpointId;
 use iroh_blobs::Hash;
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 /// Maps ring name (&str) → serialised Vec<[u8; 32]> of member PeerIds.
 const RINGS: TableDefinition<&str, &[u8]> = TableDefinition::new("rings");
