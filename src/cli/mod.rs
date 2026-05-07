@@ -78,15 +78,15 @@ async fn resolve_target(target: &str, data_dir: &std::path::Path) -> Result<(Has
     tokio::fs::create_dir_all(data_dir).await?;
     let path = PathBuf::from(target);
     if path.exists() {
-        let node = Node::start(data_dir).await?;
+        let cfg = Config::load_or_create(data_dir).context("loading config")?;
+        let node = Node::start(data_dir, cfg).await?;
         let (hash, _) = import_path(&node, &path).await?;
         let registry = node.registry.clone();
         node.shutdown().await?;
         Ok((hash, registry))
     } else {
         let hash = parse_hash(target)?;
-        let cfg = Config::load_or_create(data_dir).context("loading config")?;
-        let registry = Registry::open(data_dir.join("registry.redb"), cfg.secret_key.public())?;
+        let registry = Registry::open(data_dir.join("registry.redb"))?;
         Ok((hash, registry))
     }
 }
@@ -158,19 +158,22 @@ pub async fn run() -> Result<()> {
         Cmd::Ring(ring_cmd) => {
             tokio::fs::create_dir_all(&data_dir).await?;
             let cfg = Config::load_or_create(&data_dir).context("loading config")?;
-            let registry = Registry::open(data_dir.join("registry.redb"), cfg.secret_key.public())?;
-            command::run_ring(ring_cmd, registry)?;
+            let public_id = cfg.public_id();
+            let registry = Registry::open(data_dir.join("registry.redb"))?;
+            command::run_ring(ring_cmd, registry, public_id)?;
         }
 
         Cmd::Blob(blob_cmd) => match blob_cmd {
             BlobCmd::Import { path, tag, open } => {
-                let node = Node::start(&data_dir).await?;
+                let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+                let node = Node::start(&data_dir, cfg).await?;
                 run_import(&node, path, tag, open).await?;
                 node.shutdown().await?;
             }
 
             BlobCmd::Remove { target } => {
-                let node = Node::start(&data_dir).await?;
+                let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+                let node = Node::start(&data_dir, cfg).await?;
                 let path = PathBuf::from(&target);
                 let hash = if path.exists() {
                     let (hash, _) = import_path(&node, &path).await?;
@@ -186,7 +189,8 @@ pub async fn run() -> Result<()> {
             }
 
             BlobCmd::List => {
-                let node = Node::start(&data_dir).await?;
+                let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+                let node = Node::start(&data_dir, cfg).await?;
                 let blobs = node.list_blobs().await?;
                 if blobs.is_empty() {
                     println!("No blobs in local store.");
@@ -213,14 +217,17 @@ pub async fn run() -> Result<()> {
         },
 
         Cmd::Import { path, tag, open } => {
-            let node = Node::start(&data_dir).await?;
+            let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+            let node = Node::start(&data_dir, cfg).await?;
             run_import(&node, path, tag, open).await?;
             node.shutdown().await?;
         }
 
         Cmd::Share => {
-            let node = Node::start(&data_dir).await?;
-            println!("Node online. Peer ID: {}", node.peer_id());
+            let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+            let public_id = cfg.public_id();
+            let node = Node::start(&data_dir, cfg).await?;
+            println!("Node online. Peer ID: {public_id}");
             println!("Sharing all authorised blobs — Ctrl-C to stop.");
             tokio::signal::ctrl_c().await?;
             node.shutdown().await?;
@@ -228,7 +235,9 @@ pub async fn run() -> Result<()> {
 
         Cmd::Receive { ticket, dest } => {
             let ticket = ShareTicket::from_uri(&ticket)?;
-            let node = Node::start(&data_dir).await?;
+            let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+            let public_id = cfg.public_id();
+            let node = Node::start(&data_dir, cfg).await?;
 
             println!(
                 "Fetching {} from {}{}",
@@ -249,9 +258,9 @@ pub async fn run() -> Result<()> {
                     eprintln!("Transfer failed: {e:#}");
                     if e.to_string().contains("access denied") {
                         eprintln!();
-                        eprintln!("Your PeerId: {}", node.peer_id());
+                        eprintln!("Your PeerId: {public_id}");
                         eprintln!("Ask the file owner to run:");
-                        eprintln!("  rdrop ring add <ring-name> {}", node.peer_id());
+                        eprintln!("  rdrop ring add <ring-name> {public_id}");
                     }
                     std::process::exit(1);
                 }
@@ -296,9 +305,9 @@ pub async fn run() -> Result<()> {
         }
 
         Cmd::Id => {
-            let node = Node::start(&data_dir).await?;
-            println!("{}", node.peer_id());
-            node.shutdown().await?;
+            tokio::fs::create_dir_all(&data_dir).await?;
+            let cfg = Config::load_or_create(&data_dir).context("loading config")?;
+            println!("{}", cfg.public_id());
         }
     }
 

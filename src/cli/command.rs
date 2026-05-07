@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::{ArgGroup, Subcommand};
+use iroh::EndpointId;
 
 use crate::registry::{Registry, OPEN_RING_NAME};
 use crate::util::parse_peer_id;
@@ -59,7 +60,7 @@ pub enum Cmd {
         target: String,
     },
 
-    /// Print your PeerId so others can add you to their rings
+    /// Print your peer-id (this node public-id) so others can add you to their rings
     Id,
 }
 
@@ -113,7 +114,7 @@ pub enum RingCmd {
     Members { ring: String },
 }
 
-pub fn run_ring(cmd: RingCmd, registry: Registry) -> Result<()> {
+pub fn run_ring(cmd: RingCmd, registry: Registry, public_id: EndpointId) -> Result<()> {
     match cmd {
         RingCmd::New { name } => {
             registry.create_ring(&name)?;
@@ -145,6 +146,9 @@ pub fn run_ring(cmd: RingCmd, registry: Registry) -> Result<()> {
                 return Ok(());
             }
             let peer = parse_peer_id(&peer)?;
+            if peer == public_id {
+                return Err(anyhow!("cannot add yourself to a ring"));
+            }
             registry.add_member(&ring, peer, nickname.as_deref())?;
             match &nickname {
                 Some(nick) => println!("Added {peer} ({nick}) to ring {ring}"),
