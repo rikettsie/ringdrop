@@ -40,6 +40,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use indicatif::{ProgressBar, ProgressStyle};
 use iroh_blobs::{BlobFormat, Hash};
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -252,9 +253,34 @@ pub async fn run() -> Result<()> {
             println!("Destination: {}", dest.display());
             println!("(If interrupted, re-run this command to resume from where it stopped.)");
 
-            match node.download(&ticket, &dest).await {
-                Ok(()) => println!("Transfer complete."),
+            let pb = ProgressBar::new(0);
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template(
+                        "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+                         {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+                    )
+                    .unwrap()
+                    .progress_chars("#>-"),
+            );
+            let on_progress = {
+                let pb = pb.clone();
+                move |bytes: u64, total: u64| {
+                    pb.set_length(total);
+                    pb.set_position(bytes);
+                }
+            };
+
+            match node
+                .download_with_progress(&ticket, &dest, on_progress)
+                .await
+            {
+                Ok(()) => {
+                    pb.finish_and_clear();
+                    println!("Transfer complete.");
+                }
                 Err(e) => {
+                    pb.finish_and_clear();
                     eprintln!("Transfer failed: {e:#}");
                     if e.to_string().contains("access denied") {
                         eprintln!();

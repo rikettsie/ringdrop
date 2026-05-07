@@ -22,16 +22,22 @@
 //! 5. If the connection drops again, step 1 picks up from the last committed
 //!    chunk group — no already-verified data is re-transferred.
 
-use std::path::{Path, PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{bail, Context, Result};
-use bao_tree::ChunkRanges;
+use bao_tree::{BaoTree, ChunkRanges};
+use bytes::{Bytes, BytesMut};
 use futures_lite::StreamExt;
+use iroh::endpoint::VarInt;
 use iroh::{endpoint::presets, protocol::Router, Endpoint, EndpointAddr};
 use iroh_blobs::{
     api::blobs::{AddPathOptions, BlobStatus, ImportMode},
     format::collection::Collection,
-    store::{fs::FsStore, GcConfig},
+    store::{fs::FsStore, GcConfig, IROH_BLOCK_SIZE},
+    util::RecvStream,
     BlobFormat, Hash, HashAndFormat,
 };
 use std::time::Duration;
@@ -42,6 +48,115 @@ use super::protocol::{encode_ranges_wire, RingGate, Status, SC_ALPN};
 use crate::config::Config;
 use crate::registry::Registry;
 use crate::ticket::ShareTicket;
+
+/// Length of the u64-le content-size header that opens every bao-encoded stream.
+const BAO_SIZE_HEADER: usize = size_of::<u64>();
+
+/// Wraps a [`RecvStream`] to track download progress.
+///
+/// Serves `prefix` bytes first (the bao size header already read from the
+/// wire), then delegates all further reads to `inner`.  On every read the
+/// `callback(bytes_read, total_wire)` is called so the caller can update a
+/// progress indicator.
+struct ProgressReader<R, F> {
+    inner: R,
+    /// Pre-read bytes to replay before delegating to `inner`.
+    prefix: [u8; BAO_SIZE_HEADER],
+    prefix_remaining: usize,
+    total_wire: u64,
+    callback: F,
+    bytes_read: u64,
+}
+
+impl<R, F> ProgressReader<R, F> {
+    fn new(inner: R, prefix: [u8; BAO_SIZE_HEADER], total_wire: u64, callback: F) -> Self {
+        ProgressReader {
+            inner,
+            prefix,
+            prefix_remaining: BAO_SIZE_HEADER,
+            total_wire,
+            callback,
+            bytes_read: 0,
+        }
+    }
+
+    fn prefix_pos(&self) -> usize {
+        BAO_SIZE_HEADER - self.prefix_remaining
+    }
+}
+
+impl<R: RecvStream, F: Fn(u64, u64) + Send> RecvStream for ProgressReader<R, F> {
+    async fn recv_bytes(&mut self, len: usize) -> io::Result<Bytes> {
+        if self.prefix_remaining > 0 {
+            let start = self.prefix_pos();
+            let n = self.prefix_remaining.min(len);
+            let result = Bytes::copy_from_slice(&self.prefix[start..start + n]);
+            self.prefix_remaining -= n;
+            self.bytes_read += n as u64;
+            (self.callback)(self.bytes_read, self.total_wire);
+            return Ok(result);
+        }
+        let bytes = self.inner.recv_bytes(len).await?;
+        self.bytes_read += bytes.len() as u64;
+        (self.callback)(self.bytes_read, self.total_wire);
+        Ok(bytes)
+    }
+
+    async fn recv_bytes_exact(&mut self, len: usize) -> io::Result<Bytes> {
+        if self.prefix_remaining >= len {
+            let start = self.prefix_pos();
+            let result = Bytes::copy_from_slice(&self.prefix[start..start + len]);
+            self.prefix_remaining -= len;
+            self.bytes_read += len as u64;
+            (self.callback)(self.bytes_read, self.total_wire);
+            return Ok(result);
+        }
+        if self.prefix_remaining > 0 {
+            // Straddles the prefix/inner boundary.
+            let start = self.prefix_pos();
+            let prefix_n = self.prefix_remaining;
+            let mut buf = BytesMut::with_capacity(len);
+            buf.extend_from_slice(&self.prefix[start..start + prefix_n]);
+            self.prefix_remaining = 0;
+            self.bytes_read += prefix_n as u64;
+            let inner_bytes = self.inner.recv_bytes_exact(len - prefix_n).await?;
+            self.bytes_read += inner_bytes.len() as u64;
+            buf.extend_from_slice(&inner_bytes);
+            (self.callback)(self.bytes_read, self.total_wire);
+            return Ok(buf.freeze());
+        }
+        let bytes = self.inner.recv_bytes_exact(len).await?;
+        self.bytes_read += bytes.len() as u64;
+        (self.callback)(self.bytes_read, self.total_wire);
+        Ok(bytes)
+    }
+
+    async fn recv_exact(&mut self, target: &mut [u8]) -> io::Result<()> {
+        let mut filled = 0;
+        if self.prefix_remaining > 0 {
+            let start = self.prefix_pos();
+            let n = self.prefix_remaining.min(target.len());
+            target[..n].copy_from_slice(&self.prefix[start..start + n]);
+            self.prefix_remaining -= n;
+            self.bytes_read += n as u64;
+            filled = n;
+        }
+        if filled < target.len() {
+            self.inner.recv_exact(&mut target[filled..]).await?;
+            self.bytes_read += (target.len() - filled) as u64;
+        }
+        (self.callback)(self.bytes_read, self.total_wire);
+        Ok(())
+    }
+
+    fn stop(&mut self, code: VarInt) -> io::Result<()> {
+        self.inner.stop(code)
+    }
+
+    fn id(&self) -> u64 {
+        self.inner.id()
+    }
+}
 
 pub struct Node {
     pub endpoint: Endpoint,
@@ -216,6 +331,26 @@ impl Node {
     /// 5. On crash or disconnect, repeat from step 1 — no verified data
     ///    is retransferred.
     pub async fn download(&self, ticket: &ShareTicket, dest: impl AsRef<Path>) -> Result<()> {
+        self.download_impl(ticket, dest, |_, _| {}).await
+    }
+
+    /// Like [`download`] but calls `on_progress(bytes_read, total_wire)` after
+    /// each received chunk so the caller can drive a progress indicator.
+    pub async fn download_with_progress<F: Fn(u64, u64) + Send>(
+        &self,
+        ticket: &ShareTicket,
+        dest: impl AsRef<Path>,
+        on_progress: F,
+    ) -> Result<()> {
+        self.download_impl(ticket, dest, on_progress).await
+    }
+
+    async fn download_impl<F: Fn(u64, u64) + Send>(
+        &self,
+        ticket: &ShareTicket,
+        dest: impl AsRef<Path>,
+        on_progress: F,
+    ) -> Result<()> {
         let dest = dest.as_ref().to_path_buf();
         let hash = ticket.hash();
         let format = ticket.format();
@@ -260,10 +395,24 @@ impl Node {
             Status::Allowed => {}
         }
 
+        // The bao-encoded stream starts with an 8-byte u64-le content size.
+        // Read it now so we can size the progress bar before delegating the
+        // rest of the stream (including these bytes) to import_bao_reader.
+        let mut size_buf = [0u8; BAO_SIZE_HEADER];
+        recv.read_exact(&mut size_buf)
+            .await
+            .context("reading bao size header")?;
+        let content_size = u64::from_le_bytes(size_buf);
+        let outboard_size = BaoTree::new(content_size, IROH_BLOCK_SIZE).outboard_size();
+        let total_wire = BAO_SIZE_HEADER as u64 + outboard_size + content_size;
+
+        on_progress(0, total_wire);
+        let mut progress_recv = ProgressReader::new(recv, size_buf, total_wire, on_progress);
+
         let _ = self
             .store
             .blobs()
-            .import_bao_reader(hash, missing, &mut recv)
+            .import_bao_reader(hash, missing, &mut progress_recv)
             .await
             .context("decoding and storing bao stream")?;
 
