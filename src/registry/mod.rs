@@ -42,7 +42,6 @@ const NICKNAMES: TableDefinition<&[u8], &str> = TableDefinition::new("nicknames"
 #[derive(Clone)]
 pub struct Registry {
     db: Arc<Database>,
-    self_id: EndpointId,
 }
 
 impl Registry {
@@ -52,7 +51,7 @@ impl Registry {
     /// to add oneself to a ring.
     ///
     /// On first creation the open ring is bootstrapped automatically.
-    pub fn open(path: impl AsRef<Path>, self_id: EndpointId) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db = Database::create(path)?;
         let write = db.begin_write()?;
         {
@@ -65,10 +64,7 @@ impl Registry {
             }
         }
         write.commit()?;
-        Ok(Registry {
-            db: Arc::new(db),
-            self_id,
-        })
+        Ok(Registry { db: Arc::new(db) })
     }
 
     /// Create a new ring with the given name.
@@ -103,9 +99,6 @@ impl Registry {
     ///
     /// Returns an error if `peer` is the local node's own peer ID.
     pub fn add_member(&self, ring: &str, peer: EndpointId, nickname: Option<&str>) -> Result<()> {
-        if peer == self.self_id {
-            return Err(anyhow!("cannot add yourself to a ring"));
-        }
         let write = self.db.begin_write()?;
         {
             let mut table = write.open_table(RINGS)?;
@@ -324,13 +317,10 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    /// Returns `(registry, self_id, tempdir)`.
-    /// `self_id` is the local peer ID baked into this registry instance.
-    fn make_registry() -> (Registry, EndpointId, tempfile::TempDir) {
+    fn make_registry() -> (Registry, tempfile::TempDir) {
         let dir = tempdir().unwrap();
-        let self_id = iroh::SecretKey::generate().public();
-        let reg = Registry::open(dir.path().join("test.redb"), self_id).unwrap();
-        (reg, self_id, dir)
+        let reg = Registry::open(dir.path().join("test.redb")).unwrap();
+        (reg, dir)
     }
 
     fn make_hash(b: u8) -> Hash {
@@ -345,7 +335,7 @@ mod tests {
 
     #[test]
     fn tag_open_ring_clears_private_rings() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         reg.create_ring("friends").unwrap();
 
@@ -358,7 +348,7 @@ mod tests {
 
     #[test]
     fn tag_private_ring_clears_open_ring() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         reg.create_ring("friends").unwrap();
 
@@ -371,7 +361,7 @@ mod tests {
 
     #[test]
     fn tag_private_ring_is_idempotent() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         reg.create_ring("friends").unwrap();
 
@@ -383,7 +373,7 @@ mod tests {
 
     #[test]
     fn tag_multiple_private_rings_accumulate() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         reg.create_ring("friends").unwrap();
         reg.create_ring("work").unwrap();
@@ -399,7 +389,7 @@ mod tests {
 
     #[test]
     fn tag_file_rejects_nonexistent_ring() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         assert!(reg.tag_file(hash, "ghost").is_err());
     }
@@ -408,7 +398,7 @@ mod tests {
 
     #[test]
     fn file_rings_untagged_blob_returns_empty() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         assert_eq!(reg.file_rings(make_hash(1)).unwrap(), vec![]);
     }
 
@@ -416,33 +406,33 @@ mod tests {
 
     #[test]
     fn create_ring_rejects_reserved_name() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         assert!(reg.create_ring(OPEN_RING_NAME).is_err());
     }
 
     #[test]
     fn create_ring_rejects_duplicate() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         reg.create_ring("friends").unwrap();
         assert!(reg.create_ring("friends").is_err());
     }
 
     #[test]
     fn create_ring_rejects_empty_name() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         assert!(reg.create_ring("").is_err());
     }
 
     #[test]
     fn create_ring_rejects_name_with_whitespace() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         assert!(reg.create_ring("my ring").is_err());
         assert!(reg.create_ring("tab\there").is_err());
     }
 
     #[test]
     fn create_ring_rejects_name_with_nul() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         assert!(reg.create_ring("ring\0name").is_err());
     }
 
@@ -450,14 +440,14 @@ mod tests {
 
     #[test]
     fn list_rings_always_includes_open_ring() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let rings = reg.list_rings().unwrap();
         assert_eq!(rings[0], RingId::open());
     }
 
     #[test]
     fn list_rings_returns_all_created_rings() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         reg.create_ring("friends").unwrap();
         reg.create_ring("work").unwrap();
 
@@ -470,16 +460,8 @@ mod tests {
     // add_member / remove_member
 
     #[test]
-    fn add_member_rejects_self_peer_id() {
-        let (reg, self_id, _dir) = make_registry();
-        reg.create_ring("friends").unwrap();
-        let err = reg.add_member("friends", self_id, None).unwrap_err();
-        assert!(err.to_string().contains("yourself"));
-    }
-
-    #[test]
     fn add_member_is_idempotent() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
 
@@ -491,21 +473,21 @@ mod tests {
 
     #[test]
     fn add_member_to_nonexistent_ring_errors() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         assert!(reg.add_member("ghost", peer, None).is_err());
     }
 
     #[test]
     fn remove_member_from_nonexistent_ring_errors() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         assert!(reg.remove_member("ghost", peer).is_err());
     }
 
     #[test]
     fn remove_member_noop_when_peer_not_in_ring() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
 
@@ -518,7 +500,7 @@ mod tests {
 
     #[test]
     fn list_members_nonexistent_ring_errors() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         assert!(reg.list_members("ghost").is_err());
     }
 
@@ -526,14 +508,14 @@ mod tests {
 
     #[test]
     fn is_allowed_untagged_blob_denied() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         assert!(!reg.is_allowed(&peer, &make_hash(1)).unwrap());
     }
 
     #[test]
     fn is_allowed_open_ring_permits_any_peer() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         let peer = make_peer_id();
 
@@ -543,7 +525,7 @@ mod tests {
 
     #[test]
     fn is_allowed_member_of_tagged_ring_permitted() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
@@ -556,7 +538,7 @@ mod tests {
 
     #[test]
     fn is_allowed_non_member_denied() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         let member = make_peer_id();
         let stranger = make_peer_id();
@@ -570,7 +552,7 @@ mod tests {
 
     #[test]
     fn is_allowed_peer_in_one_of_multiple_tagged_rings_permitted() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let hash = make_hash(1);
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
@@ -588,7 +570,7 @@ mod tests {
 
     #[test]
     fn nickname_stored_and_returned_by_list_members() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
 
@@ -602,7 +584,7 @@ mod tests {
 
     #[test]
     fn no_nickname_returns_none() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
 
@@ -614,7 +596,7 @@ mod tests {
 
     #[test]
     fn nickname_updated_on_readd() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
 
@@ -628,7 +610,7 @@ mod tests {
 
     #[test]
     fn nickname_removed_with_peer() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
 
@@ -642,7 +624,7 @@ mod tests {
 
     #[test]
     fn nicknames_are_per_ring() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let peer = make_peer_id();
         reg.create_ring("friends").unwrap();
         reg.create_ring("work").unwrap();
@@ -658,7 +640,7 @@ mod tests {
 
     #[test]
     fn members_mixed_nicknames_and_none() {
-        let (reg, _self_id, _dir) = make_registry();
+        let (reg, _dir) = make_registry();
         let alice = make_peer_id();
         let bob = make_peer_id();
         reg.create_ring("friends").unwrap();

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use iroh::SecretKey;
+use iroh::{EndpointId, SecretKey};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -10,6 +10,10 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn public_id(&self) -> EndpointId {
+        self.secret_key.public()
+    }
+
     pub fn load_or_create(data_dir: &Path) -> Result<Self> {
         let path = data_dir.join("config.json");
         if path.exists() {

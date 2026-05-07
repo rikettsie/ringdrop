@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use bao_tree::ChunkRanges;
 use futures_lite::StreamExt;
-use iroh::{endpoint::presets, protocol::Router, Endpoint, EndpointAddr, EndpointId};
+use iroh::{endpoint::presets, protocol::Router, Endpoint, EndpointAddr};
 use iroh_blobs::{
     api::blobs::{AddPathOptions, BlobStatus, ImportMode},
     format::collection::Collection,
@@ -51,11 +51,10 @@ pub struct Node {
 }
 
 impl Node {
-    pub async fn start(data_dir: impl AsRef<Path>) -> Result<Self> {
+    pub async fn start(data_dir: impl AsRef<Path>, cfg: Config) -> Result<Self> {
         let data_dir = data_dir.as_ref().to_path_buf();
         tokio::fs::create_dir_all(&data_dir).await?;
 
-        let cfg = Config::load_or_create(&data_dir).context("loading config")?;
         let endpoint = Endpoint::builder(presets::N0)
             .secret_key(cfg.secret_key)
             .bind()
@@ -78,8 +77,8 @@ impl Node {
             .await
             .context("loading FsStore")?;
 
-        let registry = Registry::open(data_dir.join("registry.redb"), endpoint.id())
-            .context("opening registry")?;
+        let registry =
+            Registry::open(data_dir.join("registry.redb")).context("opening registry")?;
 
         let gate = RingGate::new(registry.clone(), store.clone());
 
@@ -98,9 +97,6 @@ impl Node {
         })
     }
 
-    pub fn peer_id(&self) -> EndpointId {
-        self.endpoint.id()
-    }
     pub fn node_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
     }
@@ -259,7 +255,7 @@ impl Node {
             Status::Denied => bail!(
                 "access denied — not in a ring for this blob.\n\
                  Your PeerId: {}",
-                self.peer_id()
+                self.endpoint.id()
             ),
             Status::Allowed => {}
         }

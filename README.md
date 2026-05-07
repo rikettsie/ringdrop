@@ -35,7 +35,7 @@ After installation, `rdrop` is available from anywhere in your shell. If it isn'
 
 ### Print your `peer-id`
 
-Share your `peer-id` with others so they can add you to their rings:
+Share your `peer-id` (i.e. your node public id) with others so they can add you to their rings:
 
 ```sh
 rdrop id

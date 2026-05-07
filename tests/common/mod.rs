@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use ringdrop::config::Config;
 use ringdrop::core::Node;
 use tempfile::TempDir;
 use tokio::fs;
@@ -12,7 +13,8 @@ pub struct TestNode {
 impl TestNode {
     pub async fn start() -> Self {
         let dir = TempDir::new().expect("tempdir");
-        let node = Node::start(dir.path()).await.expect("node start");
+        let cfg = Config::load_or_create(dir.path()).expect("config");
+        let node = Node::start(dir.path(), cfg).await.expect("node start");
         TestNode { node, _dir: dir }
     }
 
