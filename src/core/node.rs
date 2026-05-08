@@ -118,6 +118,9 @@ impl Node {
     pub async fn import_file(&self, path: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
         let path = std::path::absolute(path.as_ref())?;
         info!(path = %path.display(), "importing file");
+        let tag_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned());
         let tag = self
             .store
             .blobs()
@@ -131,10 +134,11 @@ impl Node {
             .context("add_path")?;
         let hash = tag.hash();
         let format = BlobFormat::Raw;
+        let tag_key = tag_name.unwrap_or_else(|| hash.to_string());
         // Persist: replace temp tag with a named tag so GC won't collect this blob.
         self.store
             .tags()
-            .set(hash.to_string(), HashAndFormat { hash, format })
+            .set(tag_key, HashAndFormat { hash, format })
             .await
             .context("pinning blob tag")?;
         info!(%hash, "imported — outboard computed");
@@ -144,6 +148,7 @@ impl Node {
     pub async fn import_directory(&self, dir: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
         let dir = dir.as_ref();
         info!(dir = %dir.display(), "importing directory");
+        let dir_name = dir.file_name().map(|n| n.to_string_lossy().into_owned());
 
         let mut files: Vec<(String, PathBuf)> = Vec::new();
         for entry in WalkDir::new(dir)
@@ -180,23 +185,25 @@ impl Node {
         let col_tag = collection.store(&self.store).await?;
         let hash = col_tag.hash();
         let format = BlobFormat::HashSeq;
+        let tag_key = dir_name.unwrap_or_else(|| hash.to_string());
         // Persist: named tag on the collection; GC follows HashSeq refs to keep member blobs.
         self.store
             .tags()
-            .set(hash.to_string(), HashAndFormat { hash, format })
+            .set(tag_key, HashAndFormat { hash, format })
             .await
             .context("pinning collection tag")?;
         info!(%hash, "collection stored");
         Ok((hash, format))
     }
 
-    /// List all blobs that have been imported (hash + format).
-    pub async fn list_blobs(&self) -> Result<Vec<(Hash, BlobFormat)>> {
+    /// List all blobs that have been imported (hash + format + tag name).
+    pub async fn list_blobs(&self) -> Result<Vec<(Hash, BlobFormat, Option<String>)>> {
         let mut stream = self.store.tags().list().await?;
         let mut blobs = Vec::new();
         while let Some(item) = stream.next().await {
             let info = item?;
-            blobs.push((info.hash, info.format));
+            let name = std::str::from_utf8(&info.name.0).ok().map(|s| s.to_owned());
+            blobs.push((info.hash, info.format, name));
         }
         Ok(blobs)
     }
@@ -204,11 +211,25 @@ impl Node {
     /// Remove a blob from the store. Ring tags must be removed separately via the registry.
     /// Actual disk reclamation happens on the next GC cycle (during `rdrop share`).
     pub async fn delete_blob(&self, hash: Hash) -> Result<()> {
-        self.store
-            .tags()
-            .delete(hash.to_string())
-            .await
-            .context("removing blob tag")?;
+        let mut stream = self.store.tags().list().await?;
+        let mut to_delete = Vec::new();
+        while let Some(item) = stream.next().await {
+            let info = item?;
+            if info.hash == hash {
+                to_delete.push(info.name.0.clone());
+            }
+        }
+        drop(stream);
+        if to_delete.is_empty() {
+            bail!("no tag found for hash {hash}");
+        }
+        for name in to_delete {
+            self.store
+                .tags()
+                .delete(name)
+                .await
+                .context("removing blob tag")?;
+        }
         Ok(())
     }
 
@@ -267,6 +288,20 @@ impl Node {
             info!(hash = %hash, "all chunks present — skipping download");
             return self.export(hash, format, &ticket.name, &dest).await;
         }
+
+        // Hold a temp tag for the duration of the download so GC doesn't unlink
+        // the partial .data file while we're writing it (large files take > 30s).
+        let _batch = self
+            .store
+            .blobs()
+            .batch()
+            .await
+            .context("creating download scope")?;
+        let _tt = _batch
+            .temp_tag(HashAndFormat { hash, format })
+            .await
+            .context("creating temp tag")?;
+
         info!(hash = %hash, "sending range request");
 
         let conn = self
@@ -358,8 +393,9 @@ impl Node {
         name: &Option<String>,
         dest: &Path,
     ) -> Result<()> {
+        let hash_hex = hash.to_string();
         let export_path = if dest.is_dir() {
-            dest.join(name.as_deref().unwrap_or("download"))
+            dest.join(name.as_deref().unwrap_or(&hash_hex))
         } else {
             dest.to_path_buf()
         };
