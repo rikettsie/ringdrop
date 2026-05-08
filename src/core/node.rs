@@ -197,12 +197,12 @@ impl Node {
     }
 
     /// List all blobs that have been imported (hash + format + tag name).
-    pub async fn list_blobs(&self) -> Result<Vec<(Hash, BlobFormat, Option<String>)>> {
+    pub async fn list_blobs(&self) -> Result<Vec<(Hash, BlobFormat, String)>> {
         let mut stream = self.store.tags().list().await?;
         let mut blobs = Vec::new();
         while let Some(item) = stream.next().await {
             let info = item?;
-            let name = std::str::from_utf8(&info.name.0).ok().map(|s| s.to_owned());
+            let name = String::from_utf8_lossy(&info.name.0).into_owned();
             blobs.push((info.hash, info.format, name));
         }
         Ok(blobs)

@@ -199,10 +199,10 @@ pub async fn run() -> Result<()> {
                     println!("{} blob(s):", blobs.len());
                     for (hash, format, name) in blobs {
                         let rings = node.registry.file_rings(hash)?;
-                        let ticket = node.make_ticket(hash, format, name);
+                        let ticket = node.make_ticket(hash, format, Some(name.clone()));
                         let ticket_str = ticket.to_uri()?;
                         println!();
-                        println!("  {hash}");
+                        println!("  {hash}  ({name})");
                         if rings.is_empty() {
                             println!("    rings:  (none — not accessible to any peer)");
                         } else {
