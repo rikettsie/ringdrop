@@ -118,9 +118,7 @@ impl Node {
     pub async fn import_file(&self, path: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
         let path = std::path::absolute(path.as_ref())?;
         info!(path = %path.display(), "importing file");
-        let tag_name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned());
+        let tag_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         let tag = self
             .store
             .blobs()
