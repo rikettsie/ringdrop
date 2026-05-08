@@ -197,12 +197,12 @@ pub async fn run() -> Result<()> {
                     println!("No blobs in local store.");
                 } else {
                     println!("{} blob(s):", blobs.len());
-                    for (hash, format) in blobs {
+                    for (hash, format, name) in blobs {
                         let rings = node.registry.file_rings(hash)?;
-                        let ticket = node.make_ticket(hash, format, None);
+                        let ticket = node.make_ticket(hash, format, Some(name.clone()));
                         let ticket_str = ticket.to_uri()?;
                         println!();
-                        println!("  {hash}");
+                        println!("  {hash}  ({name})");
                         if rings.is_empty() {
                             println!("    rings:  (none — not accessible to any peer)");
                         } else {
