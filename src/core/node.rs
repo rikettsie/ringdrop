@@ -399,6 +399,13 @@ impl Node {
 
     pub async fn shutdown(self) -> Result<()> {
         self.router.shutdown().await?;
+        // FsStore batches writes; the RPC ack for set/import arrives before
+        // the redb transaction commits.  sync_db() returns only after all
+        // pending batches are committed, so data is durable before we exit.
+        self.store
+            .sync_db()
+            .await
+            .context("flushing blob store to disk")?;
         Ok(())
     }
 }
