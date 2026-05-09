@@ -126,6 +126,14 @@ RUST_LOG=debug rdrop share              # debug logs including iroh internals
 
 This applies to every command, not just `share`.
 
+## Contributing
+
+After cloning, activate the pre-commit hooks (runs `cargo fmt --check` and `cargo clippy` before every commit):
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## Dependencies
 
 `ringdrop` is built on:

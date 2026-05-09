@@ -28,13 +28,13 @@ use iroh::EndpointId;
 use iroh_blobs::Hash;
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
-/// Maps ring name (&str) → serialised Vec<[u8; 32]> of member PeerIds.
+/// Maps ring name (&str) to serialised Vec<[u8; 32]> of member peer-ids.
 const RINGS: TableDefinition<&str, &[u8]> = TableDefinition::new("rings");
 
-/// Maps blob_hash (32 bytes) → NUL-separated ring names.
+/// Maps blob_hash (32 bytes) to NUL-separated ring names.
 const FILE_RINGS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("file_rings");
 
-/// Maps `ring_name \0 peer_id_bytes` → nickname string (display label only).
+/// Maps `ring_name \0 peer_id_bytes` to nickname string (display label only).
 /// Ring names are validated to contain no NUL, so the separator is unambiguous.
 const NICKNAMES: TableDefinition<&[u8], &str> = TableDefinition::new("nicknames");
 

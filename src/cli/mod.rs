@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```text
-//! # Print your PeerId so others can add you to their rings
+//! # Print your peer-id so others can add you to their rings
 //! rdrop id
 //!
 //! # Manage rings
@@ -131,10 +131,8 @@ async fn run_import(node: &Node, path: PathBuf, tag: Option<String>, open: bool)
     let ticket = node.make_ticket(hash, format, display_name);
     let ticket_str = ticket.to_uri()?;
 
-    println!();
-    println!("Ticket:");
-    println!("  {ticket_str}");
-    println!();
+    println!("\nTicket:");
+    println!("  {ticket_str}\n");
     println!("Run `rdrop share` to start accepting connections.");
     println!("Peers receive with:");
     println!("  rdrop receive {ticket_str}");
@@ -145,9 +143,15 @@ async fn run_import(node: &Node, path: PathBuf, tag: Option<String>, open: bool)
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
 
+    let default_filter = if matches!(cli.command, Cmd::Share) {
+        "ringdrop=info"
+    } else {
+        "warn"
+    };
+
     fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter)),
         )
         .with_target(false)
         .compact()
@@ -196,15 +200,14 @@ pub async fn run() -> Result<()> {
                 if blobs.is_empty() {
                     println!("No blobs in local store.");
                 } else {
-                    println!("{} blob(s):", blobs.len());
+                    println!("{} Blobs:", blobs.len());
                     for (hash, format, name) in blobs {
                         let rings = node.registry.file_rings(hash)?;
                         let ticket = node.make_ticket(hash, format, Some(name.clone()));
                         let ticket_str = ticket.to_uri()?;
-                        println!();
-                        println!("  {hash}  ({name})");
+                        println!("\n  {hash}  ({name})");
                         if rings.is_empty() {
-                            println!("    rings:  (none — not accessible to any peer)");
+                            println!("    no rings:  (inaccessible for all peers)");
                         } else {
                             let names: Vec<_> =
                                 rings.iter().map(|r| r.as_str().to_owned()).collect();
@@ -212,6 +215,7 @@ pub async fn run() -> Result<()> {
                         }
                         println!("    ticket: {ticket_str}");
                     }
+                    println!("\nNote that the ticket link may change between sessions, but the blob is always uniquely identified and addressed by the protocol.");
                 }
                 node.shutdown().await?;
             }
@@ -283,8 +287,7 @@ pub async fn run() -> Result<()> {
                     pb.finish_and_clear();
                     eprintln!("Transfer failed: {e:#}");
                     if e.to_string().contains("access denied") {
-                        eprintln!();
-                        eprintln!("Your PeerId: {public_id}");
+                        eprintln!("\nYour peer-id: {public_id}");
                         eprintln!("Ask the file owner to run:");
                         eprintln!("  rdrop ring add <ring-name> {public_id}");
                     }
@@ -319,7 +322,7 @@ pub async fn run() -> Result<()> {
             if rings.is_empty() {
                 println!("{hash}: no rings (access denied to all peers)");
             } else {
-                println!("{}: {} ring(s):", hash, rings.len());
+                println!("{}: {} rings:", hash, rings.len());
                 for ring in &rings {
                     if ring.is_open() {
                         println!("  {}  (open — publicly accessible)", ring.as_str());

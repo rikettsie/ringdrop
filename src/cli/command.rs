@@ -17,14 +17,16 @@ pub enum Cmd {
     #[command(subcommand)]
     Blob(BlobCmd),
 
-    /// Import a file/directory into the blob store and print a ticket (shortcut for `blob import`)
+    /// Import a file or directory into the blob store and print a ticket (shortcut for `blob import`)
     Import {
         /// Path to import (file or directory)
         path: PathBuf,
-        /// Ring to tag the blob with; if omitted the blob won't be served until tagged
+
+        /// Ring to tag the blob with; if omitted the blob won't be donwloadable until tagged
         #[arg(long, conflicts_with = "open")]
         tag: Option<String>,
-        /// Tag as publicly accessible (anyone can download); shorthand for --tag open
+
+        /// Tag the blob as "publicly accessible" (anyone can download); shorthand for --tag open
         #[arg(long, conflicts_with = "tag")]
         open: bool,
     },
@@ -36,19 +38,22 @@ pub enum Cmd {
     Receive {
         /// Ticket string (rdrop://...)
         ticket: String,
+
         /// Destination path (directory or file path)
         #[arg(long, default_value = ".")]
         dest: PathBuf,
     },
 
-    /// Grant access to a file by tagging it with a ring
+    /// Grant access to a blob by tagging it with a ring
     #[command(group(ArgGroup::new("access").required(true).args(["rings", "open"])))]
     Tag {
-        /// File path or BLAKE3 hash (hex)
+        /// Path (file or directory) or BLAKE3 hash (hex)
         target: String,
+
         /// Tag with a named ring (repeat for multiple)
         #[arg(long = "ring", conflicts_with = "open")]
         rings: Vec<String>,
+
         /// Tag as publicly accessible (anyone can download)
         #[arg(long, conflicts_with = "rings")]
         open: bool,
@@ -56,32 +61,36 @@ pub enum Cmd {
 
     /// Show which rings a file is tagged with
     Tags {
-        /// File path or BLAKE3 hash (hex)
+        /// Path (file or directory) or BLAKE3 hash (hex)
         target: String,
     },
 
-    /// Print your peer-id (this node public-id) so others can add you to their rings
+    /// Print your peer-id (i.e. this node public-id) so others can add you to their rings
     Id,
 }
 
 #[derive(Subcommand)]
 pub enum BlobCmd {
-    /// Import a file/directory into the blob store and print a ticket
+    /// Import a file or directory into the blob store and print a ticket
     Import {
         /// Path to import (file or directory)
         path: PathBuf,
+
         /// Ring to tag the blob with; if omitted the blob won't be served until tagged
         #[arg(long, conflicts_with = "open")]
         tag: Option<String>,
-        /// Tag as publicly accessible (anyone can download); shorthand for --tag open
+
+        /// Tag the blob as publicly accessible (anyone can download); shorthand for --tag open
         #[arg(long, conflicts_with = "tag")]
         open: bool,
     },
+
     /// Remove a blob from the local store and all its ring tags
     Remove {
         /// File path or BLAKE3 hash (hex)
         target: String,
     },
+
     /// List all local blobs with their ring tags and share ticket
     List,
 }
@@ -93,23 +102,28 @@ pub enum RingCmd {
         /// Name for the ring (e.g. "friends", "work-team")
         name: String,
     },
+
     /// List all rings
     List,
+
     /// Add a peer to a ring
     Add {
         ring: String,
         #[arg(value_name = "PEER-ID")]
         peer: String,
+
         /// Optional display label for this peer
         #[arg(long)]
         nickname: Option<String>,
     },
+
     /// Remove a peer from a ring
     Remove {
         ring: String,
         #[arg(value_name = "PEER-ID")]
         peer: String,
     },
+
     /// List members of a ring
     Members { ring: String },
 }
@@ -123,7 +137,7 @@ pub fn run_ring(cmd: RingCmd, registry: Registry, public_id: EndpointId) -> Resu
         }
         RingCmd::List => {
             let rings = registry.list_rings()?;
-            println!("{} ring(s):", rings.len());
+            println!("{} rings:", rings.len());
             for r in rings {
                 if r.is_open() {
                     println!(
@@ -132,7 +146,7 @@ pub fn run_ring(cmd: RingCmd, registry: Registry, public_id: EndpointId) -> Resu
                     );
                 } else {
                     let members = registry.list_members(r.as_str())?;
-                    println!("  {}  ({} member(s))", r.as_str(), members.len());
+                    println!("  {}  ({} members", r.as_str(), members.len());
                 }
             }
         }
@@ -142,7 +156,7 @@ pub fn run_ring(cmd: RingCmd, registry: Registry, public_id: EndpointId) -> Resu
             nickname,
         } => {
             if ring == OPEN_RING_NAME {
-                println!("The open ring has no membership list — everyone is welcome.");
+                println!("The open ring has no membership list — everyone is welcome by default.");
                 return Ok(());
             }
             let peer = parse_peer_id(&peer)?;
@@ -173,9 +187,9 @@ pub fn run_ring(cmd: RingCmd, registry: Registry, public_id: EndpointId) -> Resu
             if members.is_empty() {
                 println!("Ring '{ring}' has no members yet.");
                 println!("Add peers: rdrop ring add {ring} <peer-id>");
-                println!("Peers print their PeerId with: rdrop id");
+                println!("Peers print their peer-id with: rdrop id");
             } else {
-                println!("Ring '{ring}' — {} member(s):", members.len());
+                println!("Ring '{ring}' — {} members:", members.len());
                 for (peer, nick) in members {
                     match nick {
                         Some(n) => println!("  {peer}  ({n})"),

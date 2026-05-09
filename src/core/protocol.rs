@@ -188,7 +188,7 @@ impl RingGate {
         let already_have = decode_ranges_wire(range_count, &range_data)?;
         let missing = ChunkRanges::all() & !already_have;
 
-        debug!(%peer, %hash, "request — {} already-have range(s)", range_count);
+        debug!(%peer, %hash, "request — {} already-have ranges", range_count);
 
         if !self.registry.is_allowed(&peer, &hash).unwrap_or(false) {
             warn!(%peer, %hash, "DENIED");
@@ -197,19 +197,26 @@ impl RingGate {
             return Ok(());
         }
 
-        info!(%peer, %hash, "ALLOWED — streaming missing ranges");
         send.write_all(&[Status::Allowed as u8]).await?;
+        info!(%peer, %hash, "TRANSFER ALLOWED");
 
-        self.store
+        match self
+            .store
             .blobs()
             .export_bao(hash, missing)
             .write(&mut SendStreamWriter(&mut send))
             .await
-            .context("bao streaming failed")?;
+        {
+            Ok(()) => {
+                send.finish()?;
+                info!(%peer, %hash, "TRANSFER COMPLETED");
+            }
+            Err(e) => {
+                warn!(%peer, %hash, "TRANSFER FAILED");
+                return Err(e).context("bao streaming failed");
+            }
+        }
 
-        send.finish()?;
-
-        info!(%peer, %hash, "done");
         Ok(())
     }
 }

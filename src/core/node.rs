@@ -321,7 +321,7 @@ impl Node {
         match Status::try_from(status_byte[0])? {
             Status::Denied => bail!(
                 "access denied — not in a ring for this blob.\n\
-                 Your PeerId: {}",
+                 Your peer-id: {}",
                 self.endpoint.id()
             ),
             Status::Allowed => {}
