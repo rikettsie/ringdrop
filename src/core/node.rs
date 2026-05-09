@@ -255,7 +255,7 @@ impl Node {
 
     /// Like [`download`] but calls `on_progress(bytes_read, total_wire)` after
     /// each received chunk so the caller can drive a progress indicator.
-    pub async fn download_with_progress<F: Fn(u64, u64) + Send>(
+    pub async fn download_with_progress<F: Fn(u64, u64) + Send + Sync>(
         &self,
         ticket: &ShareTicket,
         dest: impl AsRef<Path>,
@@ -264,13 +264,14 @@ impl Node {
         self.download_impl(ticket, dest, on_progress).await
     }
 
-    async fn download_impl<F: Fn(u64, u64) + Send>(
+    async fn download_impl<F: Fn(u64, u64) + Send + Sync>(
         &self,
         ticket: &ShareTicket,
         dest: impl AsRef<Path>,
         on_progress: F,
     ) -> Result<()> {
         let dest = dest.as_ref().to_path_buf();
+        let on_progress = std::sync::Arc::new(on_progress);
         let hash = ticket.hash();
         let format = ticket.format();
         let node_addr = ticket.node_addr().clone();
@@ -340,7 +341,12 @@ impl Node {
                 .context("reading bao size header")?;
             let content_size = u64::from_le_bytes(size_buf);
 
-            on_progress(0, content_size);
+            // For raw blobs report progress on the root download.
+            // For HashSeq the root is a tiny metadata blob; progress is reported
+            // per member file instead, so skip it here to avoid a misleading jump.
+            if format == BlobFormat::Raw {
+                on_progress(0, content_size);
+            }
 
             // Drive the bao decoder manually so we can report content-byte progress
             // via BaoContentItem::Leaf offsets rather than raw wire bytes.
@@ -361,6 +367,11 @@ impl Node {
                 // If we relied on scope-based drop, `tx` would outlive `driver`'s final
                 // poll (still owned by the join state machine), causing `rx.await` to
                 // block forever.
+                let root_progress = if format == BlobFormat::Raw {
+                    Some(std::sync::Arc::clone(&on_progress))
+                } else {
+                    None
+                };
                 let driver = async move {
                     let result = loop {
                         match decoder.next().await {
@@ -368,7 +379,9 @@ impl Node {
                             ResponseDecoderNext::More((next, item)) => {
                                 let item = item.map_err(io::Error::other)?;
                                 if let BaoContentItem::Leaf(ref leaf) = item {
-                                    on_progress(leaf.offset + leaf.data.len() as u64, content_size);
+                                    if let Some(ref p) = root_progress {
+                                        p(leaf.offset + leaf.data.len() as u64, content_size);
+                                    }
                                 }
                                 tx.send(item).await.map_err(io::Error::from)?;
                                 decoder = next;
@@ -400,7 +413,9 @@ impl Node {
             let hash_seq = HashSeq::try_from(root_bytes).context("parsing HashSeq")?;
             for item_hash in hash_seq {
                 info!(item_hash = %item_hash, "fetching collection item");
-                self.fetch_blob(&conn, item_hash).await?;
+                let op = std::sync::Arc::clone(&on_progress);
+                self.fetch_blob(&conn, item_hash, move |b, t| op(b, t))
+                    .await?;
             }
         }
 
@@ -408,7 +423,12 @@ impl Node {
     }
 
     /// Fetch a single raw blob over an already-open connection, resuming if partially present.
-    async fn fetch_blob(&self, conn: &Connection, hash: Hash) -> Result<()> {
+    async fn fetch_blob<F: Fn(u64, u64) + Send>(
+        &self,
+        conn: &Connection,
+        hash: Hash,
+        on_progress: F,
+    ) -> Result<()> {
         let already_have = match self.store.blobs().status(hash).await {
             Ok(BlobStatus::Complete { .. }) => {
                 info!(%hash, "member already complete — skipping");
@@ -437,6 +457,7 @@ impl Node {
             .await
             .context("reading bao size header")?;
         let content_size = u64::from_le_bytes(size_buf);
+        on_progress(0, content_size);
 
         if let Some(size) = NonZeroU64::new(content_size) {
             let tree = BaoTree::new(content_size, IROH_BLOCK_SIZE);
@@ -456,6 +477,9 @@ impl Node {
                         ResponseDecoderNext::Done(_) => break io::Result::Ok(()),
                         ResponseDecoderNext::More((next, item)) => {
                             let item = item.map_err(io::Error::other)?;
+                            if let BaoContentItem::Leaf(ref leaf) = item {
+                                on_progress(leaf.offset + leaf.data.len() as u64, content_size);
+                            }
                             tx.send(item).await.map_err(io::Error::from)?;
                             decoder = next;
                         }
