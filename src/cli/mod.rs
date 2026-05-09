@@ -36,7 +36,7 @@
 
 mod command;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -65,6 +65,31 @@ struct Cli {
 
     #[command(subcommand)]
     command: Cmd,
+}
+
+/// Returns the final output path, or an error if it already exists and `force_overwrite` is false.
+///
+/// When `dest` is an existing directory the output lands at `dest/<name>` (or `dest/<hash>` when
+/// the ticket carries no name). When `dest` is not an existing directory it is used as-is.
+fn check_dest(
+    dest: &Path,
+    name: Option<&str>,
+    hash_hex: &str,
+    force_overwrite: bool,
+) -> Result<PathBuf> {
+    let expected = if dest.is_dir() {
+        dest.join(name.unwrap_or(hash_hex))
+    } else {
+        dest.to_path_buf()
+    };
+    if expected.exists() && !force_overwrite {
+        anyhow::bail!(
+            "destination '{}' already exists; \
+             use --dest to choose a different location or --force-overwrite to replace it",
+            expected.display()
+        );
+    }
+    Ok(expected)
 }
 
 async fn import_path(node: &Node, path: &std::path::Path) -> Result<(Hash, BlobFormat)> {
@@ -238,8 +263,20 @@ pub async fn run() -> Result<()> {
             node.shutdown().await?;
         }
 
-        Cmd::Receive { ticket, dest } => {
+        Cmd::Receive {
+            ticket,
+            dest,
+            force_overwrite,
+        } => {
             let ticket = ShareTicket::from_uri(&ticket)?;
+
+            // Check for destination conflict before starting any network activity.
+            let hash_hex = ticket.hash().to_string();
+            if let Err(e) = check_dest(&dest, ticket.name.as_deref(), &hash_hex, force_overwrite) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+
             let cfg = Config::load_or_create(&data_dir).context("loading config")?;
             let public_id = cfg.public_id();
             let node = Node::start(&data_dir, cfg).await?;
@@ -341,4 +378,66 @@ pub async fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn dest_does_not_exist_is_accepted() {
+        let dir = TempDir::new().unwrap();
+        let dest = dir.path().join("output.txt");
+        assert!(check_dest(&dest, Some("output.txt"), "deadbeef", false).is_ok());
+    }
+
+    #[test]
+    fn existing_dest_without_force_overwrite_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let dest = dir.path().join("output.txt");
+        std::fs::write(&dest, b"old").unwrap();
+        let err = check_dest(&dest, Some("output.txt"), "deadbeef", false).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+        assert!(err.to_string().contains("--force-overwrite"));
+    }
+
+    #[test]
+    fn existing_dest_with_force_overwrite_is_accepted() {
+        let dir = TempDir::new().unwrap();
+        let dest = dir.path().join("output.txt");
+        std::fs::write(&dest, b"old").unwrap();
+        assert!(check_dest(&dest, Some("output.txt"), "deadbeef", true).is_ok());
+    }
+
+    #[test]
+    fn dest_is_dir_and_named_file_does_not_exist_is_accepted() {
+        let dir = TempDir::new().unwrap();
+        let result = check_dest(dir.path(), Some("fox.txt"), "deadbeef", false).unwrap();
+        assert_eq!(result, dir.path().join("fox.txt"));
+    }
+
+    #[test]
+    fn dest_is_dir_and_named_file_exists_without_force_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("fox.txt"), b"old").unwrap();
+        let err = check_dest(dir.path(), Some("fox.txt"), "deadbeef", false).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn dest_is_dir_and_named_file_exists_with_force_is_accepted() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("fox.txt"), b"old").unwrap();
+        assert!(check_dest(dir.path(), Some("fox.txt"), "deadbeef", true).is_ok());
+    }
+
+    #[test]
+    fn dest_is_dir_and_no_ticket_name_falls_back_to_hash() {
+        let dir = TempDir::new().unwrap();
+        let hash_hex = "abc123";
+        std::fs::write(dir.path().join(hash_hex), b"old").unwrap();
+        let err = check_dest(dir.path(), None, hash_hex, false).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
 }

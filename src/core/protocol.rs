@@ -25,13 +25,13 @@ use std::{fmt, io};
 use anyhow::{bail, Context, Result};
 use bao_tree::{ChunkNum, ChunkRanges};
 use bytes::Bytes;
+use futures_lite::StreamExt;
 use iroh::{
     endpoint::Connection,
     protocol::{AcceptError, ProtocolHandler},
     EndpointId,
 };
 use iroh_blobs::{hashseq::HashSeq, store::fs::FsStore, BlobFormat, Hash};
-use futures_lite::StreamExt;
 use iroh_io::AsyncStreamWriter;
 use tracing::{debug, info, warn};
 

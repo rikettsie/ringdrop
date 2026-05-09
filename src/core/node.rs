@@ -368,10 +368,7 @@ impl Node {
                             ResponseDecoderNext::More((next, item)) => {
                                 let item = item.map_err(io::Error::other)?;
                                 if let BaoContentItem::Leaf(ref leaf) = item {
-                                    on_progress(
-                                        leaf.offset + leaf.data.len() as u64,
-                                        content_size,
-                                    );
+                                    on_progress(leaf.offset + leaf.data.len() as u64, content_size);
                                 }
                                 tx.send(item).await.map_err(io::Error::from)?;
                                 decoder = next;

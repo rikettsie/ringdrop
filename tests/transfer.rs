@@ -44,9 +44,7 @@ async fn directory_contents_match_after_transfer() {
     let (hash, format) = sender.node.import_directory(&dir).await.unwrap();
     sender.node.registry.tag_file(hash, OPEN_RING_NAME).unwrap();
 
-    let ticket = sender
-        .node
-        .make_ticket(hash, format, Some("mydir".into()));
+    let ticket = sender.node.make_ticket(hash, format, Some("mydir".into()));
     let dest = TempDir::new().unwrap();
     receiver.node.download(&ticket, dest.path()).await.unwrap();
 

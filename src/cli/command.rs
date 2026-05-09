@@ -42,6 +42,10 @@ pub enum Cmd {
         /// Destination path (directory or file path)
         #[arg(long, default_value = ".")]
         dest: PathBuf,
+
+        /// Overwrite an existing destination without warning
+        #[arg(long)]
+        force_overwrite: bool,
     },
 
     /// Grant access to a blob by tagging it with a ring
