@@ -233,7 +233,17 @@ impl Node {
     }
 
     pub fn make_ticket(&self, hash: Hash, format: BlobFormat, name: Option<String>) -> ShareTicket {
-        let addr = self.node_addr();
+        let full_addr = self.node_addr();
+        // Import and share are separate node instances with different random UDP ports,
+        // so the direct IP addresses captured here are stale by the time the receiver
+        // connects. Keeping only the relay URL lets iroh reach the live share node
+        // via relay immediately, without wasting the 10-second path-finding window
+        // trying unreachable addresses.
+        let addr = full_addr
+            .relay_urls()
+            .fold(EndpointAddr::new(full_addr.id), |a, url| {
+                a.with_relay_url(url.clone())
+            });
         match format {
             BlobFormat::HashSeq => ShareTicket::new_collection(addr, hash, name),
             _ => ShareTicket::new(addr, hash, name),
