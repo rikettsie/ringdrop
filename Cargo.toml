@@ -1,12 +1,12 @@
 [package]
 name = "ringdrop"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Enrico Fusto"]
 license = "MIT"
 description = "P2P streamed file transfer with ring-based access control, built on iroh and bao protocols"
 repository = "https://github.com/rikettsie/ringdrop"
-keywords = ["p2p", "cli", "file-transfer", "ring-authorization", "iroh", "hole-punching", "network"]
+keywords = ["p2p", "cli", "file-transfer", "ring-authorization", "hole-punching"]
 
 [lib]
 name = "ringdrop"
