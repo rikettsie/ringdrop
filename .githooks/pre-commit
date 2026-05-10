@@ -6,3 +6,10 @@ cargo fmt --check
 
 echo "► cargo clippy"
 cargo clippy --all-targets -- -D warnings
+
+echo "► Cargo.toml keywords (max 5)"
+count=$(git show :Cargo.toml 2>/dev/null | grep '^keywords' | grep -o '"[^"]*"' | wc -l | tr -d ' ')
+if [ "$count" -gt 5 ]; then
+    echo "error: Cargo.toml has $count keywords — crates.io allows at most 5"
+    exit 1
+fi
