@@ -1,0 +1,15 @@
+#!/bin/sh
+# Reject a version tag push if CHANGELOG.md has not been updated to mention it.
+
+while read local_ref local_sha remote_ref remote_sha; do
+    case "$local_ref" in
+        refs/tags/v*)
+            version="${local_ref#refs/tags/v}"
+            if ! grep -q "## \[${version}\]" CHANGELOG.md 2>/dev/null; then
+                echo "error: pushing tag v${version} but CHANGELOG.md does not mention it."
+                echo "       Run: make release VERSION=${version}"
+                exit 1
+            fi
+            ;;
+    esac
+done
