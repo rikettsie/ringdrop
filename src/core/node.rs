@@ -29,15 +29,15 @@ use super::ticket::ShareTicket;
 use crate::config::Config;
 use crate::registry::Registry;
 
-pub struct Node {
+pub struct Node<R> {
     pub endpoint: Endpoint,
     pub store: FsStore,
-    pub registry: Registry,
+    pub registry: R,
     router: Router,
 }
 
-impl Node {
-    pub async fn start(data_dir: impl AsRef<Path>, cfg: Config) -> Result<Self> {
+impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
+    pub async fn start(data_dir: impl AsRef<Path>, cfg: Config, registry: R) -> Result<Self> {
         let data_dir = data_dir.as_ref().to_path_buf();
         tokio::fs::create_dir_all(&data_dir).await?;
 
@@ -62,9 +62,6 @@ impl Node {
         let store = FsStore::load_with_opts(db_path, fs_opts)
             .await
             .context("loading FsStore")?;
-
-        let registry =
-            Registry::open(data_dir.join("registry.redb")).context("opening registry")?;
 
         let gate = RingGate::new(registry.clone(), store.clone());
 

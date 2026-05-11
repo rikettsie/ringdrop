@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::core::Node;
-use crate::registry::OPEN_RING_NAME;
+use crate::registry::{RedbRegistry, Registry, OPEN_RING_NAME};
 use crate::util::parse_hash;
 
 use super::{import_path, BlobCmd};
@@ -16,13 +16,15 @@ pub async fn run_import(
     data_dir: &Path,
 ) -> Result<()> {
     let cfg = Config::load_or_create(data_dir).context("loading config")?;
-    let node = Node::start(data_dir, cfg).await?;
+    let registry =
+        RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
+    let node = Node::start(data_dir, cfg, registry).await?;
     run_import_with_node(&node, path, rings, open).await?;
     node.shutdown().await
 }
 
 pub(super) async fn run_import_with_node(
-    node: &Node,
+    node: &Node<RedbRegistry>,
     path: PathBuf,
     rings: Vec<String>,
     open: bool,
@@ -36,7 +38,7 @@ pub(super) async fn run_import_with_node(
     };
 
     if effective_rings.is_empty() {
-        let existing = node.registry.file_rings(hash)?;
+        let existing = node.registry.list_prop_rings(hash)?;
         if existing.is_empty() {
             println!("Warning: not tagged — this blob won't be served to any peer.");
             println!("Tag it with:");
@@ -54,7 +56,7 @@ pub(super) async fn run_import_with_node(
         }
     } else {
         for ring in &effective_rings {
-            node.registry.tag_file(hash, ring)?;
+            node.registry.add_ring_to_prop(hash, ring)?;
             if ring == OPEN_RING_NAME {
                 println!("Tagged as open (publicly accessible)");
             } else {
@@ -84,7 +86,9 @@ pub async fn run(cmd: BlobCmd, data_dir: &Path) -> Result<()> {
 
         BlobCmd::Remove { target } => {
             let cfg = Config::load_or_create(data_dir).context("loading config")?;
-            let node = Node::start(data_dir, cfg).await?;
+            let registry =
+                RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
+            let node = Node::start(data_dir, cfg, registry).await?;
             let path = PathBuf::from(&target);
             let hash = if path.exists() {
                 let (hash, _) = import_path(&node, &path).await?;
@@ -92,7 +96,7 @@ pub async fn run(cmd: BlobCmd, data_dir: &Path) -> Result<()> {
             } else {
                 parse_hash(&target)?
             };
-            node.registry.remove_file_tags(hash)?;
+            node.registry.remove_ring_from_prop(hash)?;
             node.delete_blob(hash).await?;
             println!("Removed {hash}");
             println!("Disk space will be reclaimed on the next `rdrop share` run.");
@@ -101,14 +105,16 @@ pub async fn run(cmd: BlobCmd, data_dir: &Path) -> Result<()> {
 
         BlobCmd::List => {
             let cfg = Config::load_or_create(data_dir).context("loading config")?;
-            let node = Node::start(data_dir, cfg).await?;
+            let registry =
+                RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
+            let node = Node::start(data_dir, cfg, registry).await?;
             let blobs = node.list_blobs().await?;
             if blobs.is_empty() {
                 println!("No blobs in local store.");
             } else {
                 println!("{} Blobs:", blobs.len());
                 for (hash, format, name) in blobs {
-                    let rings = node.registry.file_rings(hash)?;
+                    let rings = node.registry.list_prop_rings(hash)?;
                     let ticket = node.make_ticket(hash, format, Some(name.clone()));
                     let ticket_str = ticket.to_uri()?;
                     println!("\n  {hash}  ({name})");

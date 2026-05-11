@@ -34,24 +34,24 @@ impl AsyncStreamWriter for SendStreamWriter<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) struct RingGate {
-    registry: Registry,
+pub(crate) struct RingGate<R> {
+    registry: R,
     store: FsStore,
 }
 
-impl fmt::Debug for RingGate {
+impl<R> fmt::Debug for RingGate<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RingGate").finish_non_exhaustive()
     }
 }
 
-impl RingGate {
-    pub(crate) fn new(registry: Registry, store: FsStore) -> Self {
+impl<R: Registry + Clone + Send + Sync + 'static> RingGate<R> {
+    pub(crate) fn new(registry: R, store: FsStore) -> Self {
         RingGate { registry, store }
     }
 }
 
-impl ProtocolHandler for RingGate {
+impl<R: Registry + Clone + Send + Sync + 'static> ProtocolHandler for RingGate<R> {
     fn accept(
         &self,
         conn: Connection,
@@ -65,7 +65,7 @@ impl ProtocolHandler for RingGate {
     }
 }
 
-impl RingGate {
+impl<R: Registry + Clone + Send + Sync + 'static> RingGate<R> {
     /// Returns true if `hash` is referenced by any collection the peer is allowed to access.
     /// Iterates over all HashSeq tags; called only when the direct registry check fails.
     async fn is_member_of_allowed_collection(&self, peer: &EndpointId, hash: &Hash) -> bool {

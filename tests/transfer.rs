@@ -1,6 +1,6 @@
 mod common;
 
-use ringdrop::registry::OPEN_RING_NAME;
+use ringdrop::registry::{Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -13,7 +13,11 @@ async fn file_content_matches_after_transfer() {
     let file = common::write_file(src.path(), "fox.txt", content).await;
 
     let (hash, format) = sender.node.import_file(&file).await.unwrap();
-    sender.node.registry.tag_file(hash, OPEN_RING_NAME).unwrap();
+    sender
+        .node
+        .registry
+        .add_ring_to_prop(hash, OPEN_RING_NAME)
+        .unwrap();
 
     let ticket = sender
         .node
@@ -42,7 +46,11 @@ async fn directory_contents_match_after_transfer() {
     common::write_file(&dir, "data.bin", b"\x00\x01\x02\x03").await;
 
     let (hash, format) = sender.node.import_directory(&dir).await.unwrap();
-    sender.node.registry.tag_file(hash, OPEN_RING_NAME).unwrap();
+    sender
+        .node
+        .registry
+        .add_ring_to_prop(hash, OPEN_RING_NAME)
+        .unwrap();
 
     let ticket = sender.node.make_ticket(hash, format, Some("mydir".into()));
     let dest = TempDir::new().unwrap();
@@ -72,7 +80,11 @@ async fn already_complete_blob_skips_transfer() {
     let file = common::write_file(src.path(), "cached.txt", content).await;
 
     let (hash, format) = sender.node.import_file(&file).await.unwrap();
-    sender.node.registry.tag_file(hash, OPEN_RING_NAME).unwrap();
+    sender
+        .node
+        .registry
+        .add_ring_to_prop(hash, OPEN_RING_NAME)
+        .unwrap();
 
     let ticket = sender
         .node

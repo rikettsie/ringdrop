@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, Result};
 
-use crate::registry::{Registry, OPEN_RING_NAME};
+use crate::registry::{RedbRegistry, Registry, OPEN_RING_NAME};
 use crate::util::parse_peer_id;
 
 use super::RingCmd;
@@ -11,7 +11,7 @@ pub fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(data_dir)?;
     let cfg = crate::config::Config::load_or_create(data_dir)?;
     let public_id = cfg.public_id();
-    let registry = Registry::open(data_dir.join("registry.redb"))?;
+    let registry = RedbRegistry::open(data_dir.join("registry.redb"))?;
 
     match cmd {
         RingCmd::New { name } => {
@@ -29,7 +29,7 @@ pub fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
                         r.as_str()
                     );
                 } else {
-                    let members = registry.list_members(r.as_str())?;
+                    let members = registry.list_ring_peers(r.as_str())?;
                     println!("  {}  ({} members)", r.as_str(), members.len());
                 }
             }
@@ -47,7 +47,7 @@ pub fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
             if peer == public_id {
                 return Err(anyhow!("cannot add yourself to a ring"));
             }
-            registry.add_member(&ring, peer, nickname.as_deref())?;
+            registry.add_peer_to_ring(&ring, peer, nickname.as_deref())?;
             match &nickname {
                 Some(nick) => println!("Added {peer} ({nick}) to ring {ring}"),
                 None => println!("Added {peer} to ring {ring}"),
@@ -59,7 +59,7 @@ pub fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
                 return Ok(());
             }
             let peer = parse_peer_id(&peer)?;
-            registry.remove_member(&ring, peer)?;
+            registry.remove_peer_from_ring(&ring, peer)?;
             println!("Removed {peer} from ring {ring}");
         }
         RingCmd::Members { ring } => {
@@ -67,7 +67,7 @@ pub fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
                 println!("The open ring is public — any peer may access blobs tagged with it.");
                 return Ok(());
             }
-            let members = registry.list_members(&ring)?;
+            let members = registry.list_ring_peers(&ring)?;
             if members.is_empty() {
                 println!("Ring '{ring}' has no members yet.");
                 println!("Add peers: rdrop ring add {ring} <peer-id>");
@@ -97,7 +97,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = crate::config::Config::load_or_create(dir.path()).unwrap();
         let public_id = cfg.public_id();
-        Registry::open(dir.path().join("registry.redb"))
+        RedbRegistry::open(dir.path().join("registry.redb"))
             .unwrap()
             .create_ring("friends")
             .unwrap();
@@ -131,9 +131,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            Registry::open(dir.path().join("registry.redb"))
+            RedbRegistry::open(dir.path().join("registry.redb"))
                 .unwrap()
-                .list_members(OPEN_RING_NAME)
+                .list_ring_peers(OPEN_RING_NAME)
                 .unwrap()
                 .len(),
             0

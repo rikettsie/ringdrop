@@ -5,6 +5,7 @@ use clap::{ArgGroup, Subcommand};
 use iroh_blobs::{BlobFormat, Hash};
 
 use crate::core::Node;
+use crate::registry::RedbRegistry;
 
 pub mod blob;
 pub mod id;
@@ -138,7 +139,10 @@ pub enum RingCmd {
     Members { ring: String },
 }
 
-async fn import_path(node: &Node, path: &std::path::Path) -> Result<(Hash, BlobFormat)> {
+async fn import_path(
+    node: &Node<RedbRegistry>,
+    path: &std::path::Path,
+) -> Result<(Hash, BlobFormat)> {
     if path.is_dir() {
         node.import_directory(path).await
     } else {

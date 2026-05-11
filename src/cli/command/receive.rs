@@ -6,6 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use crate::config::Config;
 use crate::core::Node;
 use crate::core::ShareTicket;
+use crate::registry::RedbRegistry;
 
 pub fn check_dest(
     dest: &Path,
@@ -44,7 +45,9 @@ pub async fn run(
 
     let cfg = Config::load_or_create(data_dir).context("loading config")?;
     let public_id = cfg.public_id();
-    let node = Node::start(data_dir, cfg).await?;
+    let registry =
+        RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
+    let node = Node::start(data_dir, cfg, registry).await?;
 
     println!(
         "Fetching {} from {}{}",

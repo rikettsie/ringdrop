@@ -1,6 +1,6 @@
 mod common;
 
-use ringdrop::registry::OPEN_RING_NAME;
+use ringdrop::registry::{Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -83,7 +83,11 @@ async fn export_without_ticket_name_uses_hash_hex_not_download() {
     let file = common::write_file(src.path(), "original.txt", content).await;
 
     let (hash, format) = sender.node.import_file(&file).await.unwrap();
-    sender.node.registry.tag_file(hash, OPEN_RING_NAME).unwrap();
+    sender
+        .node
+        .registry
+        .add_ring_to_prop(hash, OPEN_RING_NAME)
+        .unwrap();
 
     // Simulate what old `blob list` produced — ticket with no name.
     let ticket = sender.node.make_ticket(hash, format, None);

@@ -1,6 +1,6 @@
 mod common;
 
-use ringdrop::registry::OPEN_RING_NAME;
+use ringdrop::registry::{Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -12,7 +12,11 @@ async fn open_ring_allows_any_peer() {
     let file = common::write_file(src.path(), "hello.txt", b"hello from ringdrop").await;
 
     let (hash, format) = sender.node.import_file(&file).await.unwrap();
-    sender.node.registry.tag_file(hash, OPEN_RING_NAME).unwrap();
+    sender
+        .node
+        .registry
+        .add_ring_to_prop(hash, OPEN_RING_NAME)
+        .unwrap();
 
     let ticket = sender
         .node
@@ -42,9 +46,13 @@ async fn private_ring_allows_member() {
     sender
         .node
         .registry
-        .add_member("friends", receiver.node.endpoint.id(), None)
+        .add_peer_to_ring("friends", receiver.node.endpoint.id(), None)
         .unwrap();
-    sender.node.registry.tag_file(hash, "friends").unwrap();
+    sender
+        .node
+        .registry
+        .add_ring_to_prop(hash, "friends")
+        .unwrap();
 
     let ticket = sender
         .node
@@ -72,7 +80,7 @@ async fn private_ring_denies_non_member() {
     let (hash, format) = sender.node.import_file(&file).await.unwrap();
     sender.node.registry.create_ring("vip").unwrap();
     // receiver deliberately NOT added to "vip"
-    sender.node.registry.tag_file(hash, "vip").unwrap();
+    sender.node.registry.add_ring_to_prop(hash, "vip").unwrap();
 
     let ticket = sender.node.make_ticket(hash, format, None);
     let dest = TempDir::new().unwrap();
@@ -100,7 +108,7 @@ async fn untagged_blob_is_denied() {
     let file = common::write_file(src.path(), "data.txt", b"some data").await;
 
     let (hash, format) = sender.node.import_file(&file).await.unwrap();
-    // no tag_file — fail-closed default
+    // no add_ring_to_prop — fail-closed default
 
     let ticket = sender.node.make_ticket(hash, format, None);
     let dest = TempDir::new().unwrap();

@@ -2,11 +2,12 @@ use std::path::Path;
 
 use ringdrop::config::Config;
 use ringdrop::core::Node;
+use ringdrop::registry::RedbRegistry;
 use tempfile::TempDir;
 use tokio::fs;
 
 pub struct TestNode {
-    pub node: Node,
+    pub node: Node<RedbRegistry>,
     _dir: TempDir,
 }
 
@@ -14,7 +15,10 @@ impl TestNode {
     pub async fn start() -> Self {
         let dir = TempDir::new().expect("tempdir");
         let cfg = Config::load_or_create(dir.path()).expect("config");
-        let node = Node::start(dir.path(), cfg).await.expect("node start");
+        let registry = RedbRegistry::open(dir.path().join("registry.redb")).expect("registry");
+        let node = Node::start(dir.path(), cfg, registry)
+            .await
+            .expect("node start");
         TestNode { node, _dir: dir }
     }
 

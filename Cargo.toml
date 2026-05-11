@@ -44,6 +44,7 @@ walkdir = "2"                 # directory traversal for multi-file send
 futures-lite = "2"
 dirs-next = "2"               # home directory for default data path
 indicatif = "0.17"            # terminal progress bars
+serde_millis = "0.1.1"
 
 [dev-dependencies]
 tempfile = "3"
