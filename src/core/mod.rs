@@ -1,5 +1,6 @@
 mod node;
 mod protocol;
-pub mod ticket;
+mod ticket;
 
 pub use node::Node;
+pub use ticket::ShareTicket;

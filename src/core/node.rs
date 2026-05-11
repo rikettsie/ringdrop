@@ -5,58 +5,29 @@
 //!  - an iroh-blobs `FsStore`   — BLAKE3 chunking, outboard, bitfield tracking
 //!  - a `RingGate`              — custom ALPN with per-blob access control
 //!  - a `Registry`              — ring membership and file tagging
-//!
-//! # Resumption
-//!
-//! The FsStore writes a `.bitfield` file alongside each partial blob.  This
-//! bitfield records which 16 KiB chunk groups have been received **and
-//! verified**.  On reconnect:
-//!
-//! 1. Receiver reads its local bitfield (`store.observe(hash)`) and inverts it
-//!    to produce the set of still-missing ranges.
-//! 2. Missing ranges are encoded and sent in the request header.
-//! 3. Sender streams only those ranges from its own FsStore using bao encoding.
-//! 4. Receiver writes each incoming chunk group, verifying it against the
-//!    BLAKE3 outboard before committing it to the `.data` file and updating
-//!    the `.bitfield`.
-//! 5. If the connection drops again, step 1 picks up from the last committed
-//!    chunk group — no already-verified data is re-transferred.
 
 use std::{
-    io,
-    num::NonZeroU64,
     path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
 };
 
-use anyhow::{bail, Context, Result};
-use bao_tree::{
-    io::{
-        fsm::{ResponseDecoder, ResponseDecoderNext},
-        BaoContentItem,
-    },
-    BaoTree, ChunkRanges,
-};
+use anyhow::{Context, Result};
 use futures_lite::StreamExt;
-use iroh::{endpoint::presets, endpoint::Connection, protocol::Router, Endpoint, EndpointAddr};
+use iroh::{endpoint::presets, protocol::Router, Endpoint, EndpointAddr};
 use iroh_blobs::{
     api::blobs::{AddPathOptions, BlobStatus, ImportMode},
     format::collection::Collection,
-    hashseq::HashSeq,
-    store::{fs::FsStore, GcConfig, IROH_BLOCK_SIZE},
-    util::RecvStreamAsyncStreamReader,
+    store::{fs::FsStore, GcConfig},
     BlobFormat, Hash, HashAndFormat,
 };
-use std::time::Duration;
 use tracing::info;
 use walkdir::WalkDir;
 
-use super::protocol::{encode_ranges_wire, RingGate, Status, SC_ALPN};
+use super::protocol::{RingGate, RingReceiver, SC_ALPN};
 use super::ticket::ShareTicket;
 use crate::config::Config;
 use crate::registry::Registry;
-
-/// Length of the u64-le content-size header that opens every bao-encoded stream.
-const BAO_SIZE_HEADER: usize = size_of::<u64>();
 
 pub struct Node {
     pub endpoint: Endpoint,
@@ -220,7 +191,7 @@ impl Node {
         }
         drop(stream);
         if to_delete.is_empty() {
-            bail!("no tag found for hash {hash}");
+            anyhow::bail!("no tag found for hash {hash}");
         }
         for name in to_delete {
             self.store
@@ -234,11 +205,9 @@ impl Node {
 
     pub fn make_ticket(&self, hash: Hash, format: BlobFormat, name: Option<String>) -> ShareTicket {
         let full_addr = self.node_addr();
-        // Import and share are separate node instances with different random UDP ports,
-        // so the direct IP addresses captured here are stale by the time the receiver
-        // connects. Keeping only the relay URL lets iroh reach the live share node
-        // via relay immediately, without wasting the 10-second path-finding window
-        // trying unreachable addresses.
+        // Strip stale direct IP addresses — import and share are separate node instances
+        // (different random ports), so direct addrs are always stale by the time the
+        // receiver connects. Relay URL + node ID are always valid.
         let addr = full_addr
             .relay_urls()
             .fold(EndpointAddr::new(full_addr.id), |a, url| {
@@ -250,21 +219,10 @@ impl Node {
         }
     }
 
-    /// Download a blob, resuming automatically from any prior partial transfer.
-    ///
-    /// 1. Read local bitfield — which 16 KiB chunk groups do we already have?
-    /// 2. Send only the *missing* range set in the request header.
-    /// 3. Receive the bao-encoded stream for those ranges only.
-    /// 4. Decode and verify each chunk group before writing it to the FsStore.
-    ///    The `.bitfield` file is updated after each verified group.
-    /// 5. On crash or disconnect, repeat from step 1 — no verified data
-    ///    is retransferred.
     pub async fn download(&self, ticket: &ShareTicket, dest: impl AsRef<Path>) -> Result<()> {
         self.download_impl(ticket, dest, |_, _| {}).await
     }
 
-    /// Like [`download`] but calls `on_progress(bytes_read, total_wire)` after
-    /// each received chunk so the caller can drive a progress indicator.
     pub async fn download_with_progress<F: Fn(u64, u64) + Send + Sync>(
         &self,
         ticket: &ShareTicket,
@@ -281,22 +239,23 @@ impl Node {
         on_progress: F,
     ) -> Result<()> {
         let dest = dest.as_ref().to_path_buf();
-        let on_progress = std::sync::Arc::new(on_progress);
         let hash = ticket.hash();
         let format = ticket.format();
-        let node_addr = ticket.node_addr().clone();
+        let on_progress = Arc::new(on_progress);
 
-        info!(hash = %hash, from = %node_addr.id, "starting download");
+        info!(hash = %hash, from = %ticket.node_addr().id, "starting download");
 
-        let root_complete = matches!(
-            self.store.blobs().status(hash).await,
-            Ok(BlobStatus::Complete { .. })
-        );
+        let client = RingReceiver::new(self.store.clone());
 
-        // Fast path: raw blob already complete, no network needed.
-        if root_complete && format == BlobFormat::Raw {
+        // Fast path: raw blob already complete — export without touching the network.
+        if format == BlobFormat::Raw
+            && matches!(
+                self.store.blobs().status(hash).await,
+                Ok(BlobStatus::Complete { .. })
+            )
+        {
             info!(hash = %hash, "all chunks present — skipping download");
-            return self.export(hash, format, &ticket.name, &dest).await;
+            return client.export(hash, format, &ticket.name, &dest).await;
         }
 
         // Hold a temp tag for the duration of the download so GC doesn't unlink
@@ -314,246 +273,13 @@ impl Node {
 
         let conn = self
             .endpoint
-            .connect(node_addr, SC_ALPN)
+            .connect(ticket.node_addr().clone(), SC_ALPN)
             .await
             .context("connecting to sender")?;
 
-        // Download the root blob if not already complete.
-        if !root_complete {
-            info!(hash = %hash, "sending range request");
-
-            let already_have = ChunkRanges::default();
-            let missing = ChunkRanges::all();
-
-            let (mut send, mut recv) = conn.open_bi().await?;
-            send.write_all(hash.as_bytes()).await?;
-            send.write_all(&encode_ranges_wire(&already_have)).await?;
-            send.finish()?;
-
-            let mut status_byte = [0u8; 1];
-            recv.read_exact(&mut status_byte)
-                .await
-                .context("reading status")?;
-
-            match Status::try_from(status_byte[0])? {
-                Status::Denied => bail!(
-                    "access denied — not in a ring for this blob.\n\
-                     Your peer-id: {}",
-                    self.endpoint.id()
-                ),
-                Status::Allowed => {}
-            }
-
-            // First 8 bytes of the bao stream are the u64-le content size.
-            let mut size_buf = [0u8; BAO_SIZE_HEADER];
-            recv.read_exact(&mut size_buf)
-                .await
-                .context("reading bao size header")?;
-            let content_size = u64::from_le_bytes(size_buf);
-
-            // For raw blobs report progress on the root download.
-            // For HashSeq the root is a tiny metadata blob; progress is reported
-            // per member file instead, so skip it here to avoid a misleading jump.
-            if format == BlobFormat::Raw {
-                on_progress(0, content_size);
-            }
-
-            // Drive the bao decoder manually so we can report content-byte progress
-            // via BaoContentItem::Leaf offsets rather than raw wire bytes.
-            if let Some(size) = NonZeroU64::new(content_size) {
-                let tree = BaoTree::new(content_size, IROH_BLOCK_SIZE);
-                let iroh_blobs::api::blobs::ImportBaoHandle { tx, rx } = self
-                    .store
-                    .blobs()
-                    .import_bao(hash, size, 32)
-                    .await
-                    .map_err(io::Error::from)
-                    .context("starting bao import")?;
-                let reader = RecvStreamAsyncStreamReader::new(recv);
-                let mut decoder = ResponseDecoder::new(hash.into(), missing, tree, reader);
-
-                // `tx` must be explicitly dropped inside `driver` before it returns so
-                // that the store sees the end-of-stream and signals completion via `rx`.
-                // If we relied on scope-based drop, `tx` would outlive `driver`'s final
-                // poll (still owned by the join state machine), causing `rx.await` to
-                // block forever.
-                let root_progress = if format == BlobFormat::Raw {
-                    Some(std::sync::Arc::clone(&on_progress))
-                } else {
-                    None
-                };
-                let driver = async move {
-                    let result = loop {
-                        match decoder.next().await {
-                            ResponseDecoderNext::Done(_) => break io::Result::Ok(()),
-                            ResponseDecoderNext::More((next, item)) => {
-                                let item = item.map_err(io::Error::other)?;
-                                if let BaoContentItem::Leaf(ref leaf) = item {
-                                    if let Some(ref p) = root_progress {
-                                        p(leaf.offset + leaf.data.len() as u64, content_size);
-                                    }
-                                }
-                                tx.send(item).await.map_err(io::Error::from)?;
-                                decoder = next;
-                            }
-                        }
-                    };
-                    drop(tx);
-                    result
-                };
-
-                let (drive_res, rx_res) =
-                    tokio::join!(driver, async move { rx.await.map_err(io::Error::from)? });
-                drive_res.context("bao decode")?;
-                rx_res.context("bao import")?;
-            }
-
-            info!(hash = %hash, "root blob received");
-        }
-
-        // For collections: the root HashSeq lists [meta_blob, file1, file2, ...].
-        // Fetch every hash it references — Collection::load needs all of them locally.
-        if format == BlobFormat::HashSeq {
-            let root_bytes = self
-                .store
-                .blobs()
-                .get_bytes(hash)
-                .await
-                .context("reading root HashSeq")?;
-            let hash_seq = HashSeq::try_from(root_bytes).context("parsing HashSeq")?;
-            for item_hash in hash_seq {
-                info!(item_hash = %item_hash, "fetching collection item");
-                let op = std::sync::Arc::clone(&on_progress);
-                self.fetch_blob(&conn, item_hash, move |b, t| op(b, t))
-                    .await?;
-            }
-        }
-
-        self.export(hash, format, &ticket.name, &dest).await
-    }
-
-    /// Fetch a single raw blob over an already-open connection, resuming if partially present.
-    async fn fetch_blob<F: Fn(u64, u64) + Send>(
-        &self,
-        conn: &Connection,
-        hash: Hash,
-        on_progress: F,
-    ) -> Result<()> {
-        let already_have = match self.store.blobs().status(hash).await {
-            Ok(BlobStatus::Complete { .. }) => {
-                info!(%hash, "member already complete — skipping");
-                return Ok(());
-            }
-            _ => ChunkRanges::default(),
-        };
-        let missing = ChunkRanges::all() & !already_have.clone();
-
-        let (mut send, mut recv) = conn.open_bi().await?;
-        send.write_all(hash.as_bytes()).await?;
-        send.write_all(&encode_ranges_wire(&already_have)).await?;
-        send.finish()?;
-
-        let mut status_byte = [0u8; 1];
-        recv.read_exact(&mut status_byte)
+        client
+            .download(&conn, hash, format, &ticket.name, &dest, on_progress)
             .await
-            .context("reading status")?;
-        match Status::try_from(status_byte[0])? {
-            Status::Denied => bail!("member blob {hash} access denied"),
-            Status::Allowed => {}
-        }
-
-        let mut size_buf = [0u8; BAO_SIZE_HEADER];
-        recv.read_exact(&mut size_buf)
-            .await
-            .context("reading bao size header")?;
-        let content_size = u64::from_le_bytes(size_buf);
-        on_progress(0, content_size);
-
-        if let Some(size) = NonZeroU64::new(content_size) {
-            let tree = BaoTree::new(content_size, IROH_BLOCK_SIZE);
-            let iroh_blobs::api::blobs::ImportBaoHandle { tx, rx } = self
-                .store
-                .blobs()
-                .import_bao(hash, size, 32)
-                .await
-                .map_err(io::Error::from)
-                .context("starting bao import")?;
-            let reader = RecvStreamAsyncStreamReader::new(recv);
-            let mut decoder = ResponseDecoder::new(hash.into(), missing, tree, reader);
-
-            let driver = async move {
-                let result = loop {
-                    match decoder.next().await {
-                        ResponseDecoderNext::Done(_) => break io::Result::Ok(()),
-                        ResponseDecoderNext::More((next, item)) => {
-                            let item = item.map_err(io::Error::other)?;
-                            if let BaoContentItem::Leaf(ref leaf) = item {
-                                on_progress(leaf.offset + leaf.data.len() as u64, content_size);
-                            }
-                            tx.send(item).await.map_err(io::Error::from)?;
-                            decoder = next;
-                        }
-                    }
-                };
-                drop(tx);
-                result
-            };
-
-            let (drive_res, rx_res) =
-                tokio::join!(driver, async move { rx.await.map_err(io::Error::from)? });
-            drive_res.context("bao decode")?;
-            rx_res.context("bao import")?;
-        }
-
-        info!(%hash, "member blob received");
-        Ok(())
-    }
-
-    async fn export(
-        &self,
-        hash: Hash,
-        format: BlobFormat,
-        name: &Option<String>,
-        dest: &Path,
-    ) -> Result<()> {
-        let hash_hex = hash.to_string();
-        let export_path = if dest.is_dir() {
-            dest.join(name.as_deref().unwrap_or(&hash_hex))
-        } else {
-            dest.to_path_buf()
-        };
-        let export_path = std::path::absolute(&export_path)?;
-
-        match format {
-            BlobFormat::HashSeq => {
-                tokio::fs::create_dir_all(&export_path).await?;
-                let collection = Collection::load(hash, &*self.store)
-                    .await
-                    .context("loading collection")?;
-                for (name, blob_hash) in collection.iter() {
-                    let target = export_path.join(name);
-                    if let Some(parent) = target.parent() {
-                        tokio::fs::create_dir_all(parent).await?;
-                    }
-                    self.store
-                        .blobs()
-                        .export(*blob_hash, &target)
-                        .finish()
-                        .await
-                        .with_context(|| format!("exporting {name}"))?;
-                }
-            }
-            _ => {
-                self.store
-                    .blobs()
-                    .export(hash, &export_path)
-                    .finish()
-                    .await
-                    .context("exporting blob")?;
-            }
-        }
-        info!("export complete");
-        Ok(())
     }
 
     pub async fn shutdown(self) -> Result<()> {
