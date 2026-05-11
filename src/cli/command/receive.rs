@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::config::Config;
+use crate::core::ticket::ShareTicket;
 use crate::core::Node;
-use crate::ticket::ShareTicket;
 
 pub fn check_dest(
     dest: &Path,

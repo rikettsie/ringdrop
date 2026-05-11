@@ -51,9 +51,9 @@ use tracing::info;
 use walkdir::WalkDir;
 
 use super::protocol::{encode_ranges_wire, RingGate, Status, SC_ALPN};
+use super::ticket::ShareTicket;
 use crate::config::Config;
 use crate::registry::Registry;
-use crate::ticket::ShareTicket;
 
 /// Length of the u64-le content-size header that opens every bao-encoded stream.
 const BAO_SIZE_HEADER: usize = size_of::<u64>();
