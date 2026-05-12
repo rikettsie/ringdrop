@@ -4,13 +4,13 @@
 [![crates.io](https://img.shields.io/crates/v/ringdrop.svg)](https://crates.io/crates/ringdrop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE-MIT)
 
-`rdrop` is a streamed P2P file transfer tool with *ring-based* access control, built on [iroh](https://github.com/n0-computer/iroh) and [iroh-blobs](https://github.com/n0-computer/iroh-blobs).
+`rdrop` is a streamed P2P file transfer tool with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs) and [iroh-rings](https://github.com/rikettsie/iroh-rings).
 
-To share a file, tag it with one or more rings and get back an `rdrop://` ticket to hand to peers.
+To share a file, associate it with one or more rings and get back an `rdrop://` ticket to hand to peers.
 Only peers who are members of those rings can download it.
 Transfers resume automatically if interrupted — no verified data is re-transferred after a crash or disconnect.
 
-Access control is enforced at the connection level via an ALPN protocol (`iroh/ring/1`). When a peer requests a blob, the sender checks whether that peer's `peer-id` belongs to any ring the blob is tagged with. If not, the transfer is denied before any data is sent.
+Access control is enforced at the connection level via an ALPN protocol (`/iroh-rings/0`). When a peer requests a blob, the sender checks whether that peer's `peer-id` belongs to any ring the blob is associated with. If not, the transfer is denied before any data is sent.
 
 ## Features
 
@@ -61,14 +61,14 @@ rdrop ring members <ring-name>                               # list peers of a r
 **Import** a file or directory into the local blob store and produce a ticket:
 
 ```sh
-rdrop import <file-name>                    # shortcut, warns if untagged
+rdrop import <file-name>                    # shortcut, warns if not associated with any ring
 rdrop import <file-name> --open             # publicly accessible
 rdrop import <file-name> --tag <ring-name>  # restrict to a ring
 
 rdrop blob import <file-name> --open        # same, via blob subcommand
 ```
 
-If no `--tag` or `--open` is given and the file has no existing tags, a warning is printed. The blob cannot be transferred until it is tagged.
+If no `--ring` or `--open` is given, then the file is not associated with any ring and a warning is printed. The blob cannot be transferred until it is associated with a ring.
 If the file was already imported, the existing rings are summarised instead.
 
 `rdrop blob` groups all blob lifecycle operations. `rdrop import` is a shortcut for `rdrop blob import`.
@@ -79,7 +79,7 @@ If the file was already imported, the existing rings are summarised instead.
 rdrop blob list
 ```
 
-**Remove** a blob from the local store and all its associated tags:
+**Remove** a blob from the local store and all its ring associations:
 
 ```sh
 rdrop blob remove <file-name>
@@ -88,7 +88,7 @@ rdrop blob remove <hash>
 
 ### Grant or change access
 
-Add a file to one or more rings by tagging:
+Associate a file with one or more rings:
 
 ```sh
 rdrop tag <file-name> --ring <ring-name>   # restrict to a ring
@@ -105,7 +105,7 @@ Start the sharing node and make all authorised blobs available until `Ctrl-C`:
 rdrop share
 ```
 
-Keep this running while peers download. The same node serves every blob that has been tagged — there is no per-file serving step.
+Keep this running while peers download. The same node serves every blob that has been associated with a ring — there is no per-file serving step.
 
 ### Receive a file
 
