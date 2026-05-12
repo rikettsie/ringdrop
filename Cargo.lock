@@ -3201,7 +3201,7 @@ dependencies = [
 
 [[package]]
 name = "ringdrop"
-version = "0.4.3"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "bao-tree",

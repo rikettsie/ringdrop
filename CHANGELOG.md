@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-05-12
+
+### Refactoring
+
+- (**ticket**) Move ticket module inside core/
+- (**protocol**) Split protocol into sender and receiver
+- (**Registry**) Make Registry a trait to suport generic backend implementations
+- Extract access protocol into the generalized iroh-rings crate
+
 ## [0.4.3] - 2026-05-10
 
 ### Bug Fixes
