@@ -21,13 +21,19 @@ Access control is enforced at the connection level via an ALPN protocol (`/iroh-
 
 ## Install
 
-**From source (Linux / macOS):**
+**macOS:**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rikettsie/ringdrop/main/install.sh | bash
+brew install ringdrop
 ```
 
-**If you already have Rust installed:**
+**Windows:**
+
+```sh
+scoop install ringdrop
+```
+
+**Linux (and from source in general):**
 
 ```sh
 cargo install ringdrop
