@@ -1,12 +1,9 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::config::Config;
+use crate::daemon::protocol::Op;
 
-pub fn run(data_dir: &Path) -> Result<()> {
-    std::fs::create_dir_all(data_dir)?;
-    let cfg = Config::load_or_create(data_dir).context("loading config")?;
-    println!("{}", cfg.public_id());
-    Ok(())
+pub async fn run(data_dir: &Path) -> Result<()> {
+    super::daemon_client(data_dir)?.run(Op::NodeId).await
 }

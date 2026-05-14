@@ -84,7 +84,7 @@ pub async fn run() -> Result<()> {
     let data_dir = cli.data_dir.unwrap_or_else(default_data_dir);
 
     match cli.command {
-        Cmd::Ring(cmd) => command::ring::run(cmd, &data_dir)?,
+        Cmd::Ring(cmd) => command::ring::run(cmd, &data_dir).await?,
         Cmd::Blob(cmd) => command::blob::run(cmd, &data_dir).await?,
         Cmd::Import { path, rings, open } => {
             command::blob::run_import(path, rings, open, &data_dir).await?;
@@ -110,7 +110,7 @@ pub async fn run() -> Result<()> {
             command::tag::run_tag(target, rings, open, &data_dir).await?;
         }
         Cmd::Tags { target } => command::tag::run_tags(target, &data_dir).await?,
-        Cmd::Id => command::id::run(&data_dir)?,
+        Cmd::Id => command::id::run(&data_dir).await?,
     }
 
     Ok(())

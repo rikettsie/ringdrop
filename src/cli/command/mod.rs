@@ -1,11 +1,15 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{ArgGroup, Subcommand};
-use iroh_blobs::{BlobFormat, Hash};
 
-use crate::core::Node;
-use iroh_rings::RedbRegistry;
+use crate::config::Config;
+use crate::daemon::client::DaemonClient;
+
+pub(crate) fn daemon_client(data_dir: &Path) -> Result<DaemonClient> {
+    let port = Config::load_or_create(data_dir)?.daemon_port;
+    Ok(DaemonClient::new(port))
+}
 
 pub mod blob;
 pub mod daemon;
@@ -151,15 +155,4 @@ pub enum RingCmd {
 
     /// List members of a ring
     Members { ring: String },
-}
-
-async fn import_path(
-    node: &Node<RedbRegistry>,
-    path: &std::path::Path,
-) -> Result<(Hash, BlobFormat)> {
-    if path.is_dir() {
-        node.import_directory(path).await
-    } else {
-        node.import_file(path).await
-    }
 }

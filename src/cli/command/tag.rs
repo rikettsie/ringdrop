@@ -1,31 +1,8 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::config::Config;
-use crate::core::Node;
-use crate::util::parse_hash;
-use iroh_rings::{RedbRegistry, Registry, OPEN_RING_NAME};
-
-use super::import_path;
-
-async fn resolve_target(target: &str, data_dir: &Path) -> Result<(iroh_blobs::Hash, RedbRegistry)> {
-    let path = std::path::PathBuf::from(target);
-    if path.exists() {
-        let cfg = Config::load_or_create(data_dir).context("loading config")?;
-        let registry =
-            RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
-        let node = Node::start(data_dir, cfg, registry).await?;
-        let (hash, _) = import_path(&node, &path).await?;
-        let registry = node.registry.clone();
-        node.shutdown().await?;
-        Ok((hash, registry))
-    } else {
-        let hash = parse_hash(target)?;
-        let registry = RedbRegistry::open(data_dir.join("registry.redb"))?;
-        Ok((hash, registry))
-    }
-}
+use crate::daemon::protocol::Op;
 
 pub async fn run_tag(
     target: String,
@@ -33,36 +10,17 @@ pub async fn run_tag(
     open: bool,
     data_dir: &Path,
 ) -> Result<()> {
-    tokio::fs::create_dir_all(data_dir).await?;
-    let (hash, registry) = resolve_target(&target, data_dir).await?;
-
-    for ring in &rings {
-        registry.add_ring_to_resource(*hash.as_bytes(), ring)?;
-        println!("Tagged {hash} with ring '{ring}'");
-    }
-    if open {
-        registry.add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)?;
-        println!("Tagged {hash} as open (publicly accessible)");
-    }
-    Ok(())
+    super::daemon_client(data_dir)?
+        .run(Op::Tag {
+            target,
+            rings,
+            open,
+        })
+        .await
 }
 
 pub async fn run_tags(target: String, data_dir: &Path) -> Result<()> {
-    tokio::fs::create_dir_all(data_dir).await?;
-    let (hash, registry) = resolve_target(&target, data_dir).await?;
-
-    let rings = registry.list_resource_rings(*hash.as_bytes())?;
-    if rings.is_empty() {
-        println!("{hash}: no rings (access denied to all peers)");
-    } else {
-        println!("{}: {} rings:", hash, rings.len());
-        for ring in &rings {
-            if ring.is_open() {
-                println!("  {}  (open — publicly accessible)", ring.as_str());
-            } else {
-                println!("  {}", ring.as_str());
-            }
-        }
-    }
-    Ok(())
+    super::daemon_client(data_dir)?
+        .run(Op::Tags { target })
+        .await
 }

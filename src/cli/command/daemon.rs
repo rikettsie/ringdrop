@@ -7,13 +7,12 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::core::Node;
 use crate::daemon::client::DaemonClient;
-use crate::daemon::protocol::Op;
+use crate::daemon::protocol::{EventKind, Op};
 use crate::daemon::{pid, server::DaemonServer};
 use iroh_rings::RedbRegistry;
 
 pub async fn run_start(data_dir: &Path) -> Result<()> {
-    let port = Config::load_or_create(data_dir)?.daemon_port;
-    let client = DaemonClient::new(port);
+    let client = super::daemon_client(data_dir)?;
 
     if client.is_running().await {
         println!("Daemon is already running.");
@@ -60,8 +59,7 @@ pub async fn run_start(data_dir: &Path) -> Result<()> {
 }
 
 pub async fn run_stop(data_dir: &Path) -> Result<()> {
-    let port = Config::load_or_create(data_dir)?.daemon_port;
-    let client = DaemonClient::new(port);
+    let client = super::daemon_client(data_dir)?;
 
     if !client.is_running().await {
         println!("Daemon is not running.");
@@ -83,8 +81,7 @@ pub async fn run_stop(data_dir: &Path) -> Result<()> {
 }
 
 pub async fn run_status(data_dir: &Path) -> Result<()> {
-    let port = Config::load_or_create(data_dir)?.daemon_port;
-    let client = DaemonClient::new(port);
+    let client = super::daemon_client(data_dir)?;
 
     if !client.is_running().await {
         println!("Daemon is not running. Start it with: rdrop daemon start");
@@ -115,12 +112,16 @@ pub async fn run_serve(data_dir: &Path) -> Result<()> {
 
 async fn query_node_id(client: &DaemonClient) -> Result<String> {
     let mut node_id = String::new();
+    let mut err: Option<String> = None;
     client
-        .send(Op::NodeId, |event| {
-            if let crate::daemon::protocol::EventKind::Line { text } = event.kind {
-                node_id = text;
-            }
+        .send(Op::NodeId, |event| match event.kind {
+            EventKind::Line { text } => node_id = text,
+            EventKind::Error { message } => err = Some(message),
+            _ => {}
         })
         .await?;
+    if let Some(msg) = err {
+        anyhow::bail!(msg);
+    }
     Ok(node_id)
 }

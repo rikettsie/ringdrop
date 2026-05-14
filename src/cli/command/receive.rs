@@ -1,12 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use crate::config::Config;
-use crate::core::Node;
 use crate::core::ShareTicket;
-use iroh_rings::RedbRegistry;
+use crate::daemon::protocol::{EventKind, Op};
 
 pub fn check_dest(
     dest: &Path,
@@ -36,31 +34,13 @@ pub async fn run(
     data_dir: &Path,
 ) -> Result<()> {
     let ticket = ShareTicket::from_uri(ticket_str)?;
-
     let hash_hex = ticket.hash().to_string();
     if let Err(e) = check_dest(&dest, ticket.name.as_deref(), &hash_hex, force_overwrite) {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
 
-    let cfg = Config::load_or_create(data_dir).context("loading config")?;
-    let public_id = cfg.public_id();
-    let registry =
-        RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
-    let node = Node::start(data_dir, cfg, registry).await?;
-
-    println!(
-        "Fetching {} from {}{}",
-        ticket.hash(),
-        ticket.peer_id(),
-        ticket
-            .name
-            .as_deref()
-            .map(|n| format!(" ({n})"))
-            .unwrap_or_default()
-    );
-    println!("Destination: {}", dest.display());
-    println!("(If interrupted, re-run this command to resume from where it stopped.)");
+    let client = super::daemon_client(data_dir)?;
 
     let pb = ProgressBar::new(0);
     pb.set_style(
@@ -72,35 +52,39 @@ pub async fn run(
             .unwrap()
             .progress_chars("#>-"),
     );
-    let on_progress = {
-        let pb = pb.clone();
-        move |bytes: u64, total: u64| {
-            pb.set_length(total);
-            pb.set_position(bytes);
-        }
-    };
 
-    match node
-        .download_with_progress(&ticket, &dest, on_progress)
-        .await
-    {
-        Ok(()) => {
-            pb.finish_and_clear();
-            println!("Transfer complete.");
-        }
-        Err(e) => {
-            pb.finish_and_clear();
-            eprintln!("Transfer failed: {e:#}");
-            if e.to_string().contains("access denied") {
-                eprintln!("\nYour peer-id: {public_id}");
-                eprintln!("Ask the file owner to run:");
-                eprintln!("  rdrop ring add <ring-name> {public_id}");
-            }
-            std::process::exit(1);
-        }
+    let mut error_msg: Option<String> = None;
+    client
+        .send(
+            Op::Receive {
+                ticket: ticket_str.to_owned(),
+                dest,
+                force_overwrite,
+            },
+            |event| match event.kind {
+                EventKind::Line { text } => {
+                    pb.println(text);
+                }
+                EventKind::Progress { done, total } => {
+                    pb.set_length(total);
+                    pb.set_position(done);
+                }
+                EventKind::Done => {
+                    pb.finish_and_clear();
+                }
+                EventKind::Error { message } => {
+                    pb.finish_and_clear();
+                    error_msg = Some(message);
+                }
+            },
+        )
+        .await?;
+
+    if let Some(msg) = error_msg {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
     }
-
-    node.shutdown().await
+    Ok(())
 }
 
 #[cfg(test)]

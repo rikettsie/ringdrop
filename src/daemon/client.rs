@@ -43,8 +43,8 @@ impl DaemonClient {
         })?;
 
         let (reader, mut writer) = stream.into_split();
-        let json = serde_json::to_string(&req)?;
-        writer.write_all(format!("{json}\n").as_bytes()).await?;
+        let json_req = serde_json::to_string(&req)?;
+        writer.write_all(format!("{json_req}\n").as_bytes()).await?;
 
         let mut reader = BufReader::new(reader);
         let mut buf = String::new();
