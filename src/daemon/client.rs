@@ -55,9 +55,9 @@ impl DaemonClient {
             }
             let event: Event = serde_json::from_str(buf.trim())
                 .with_context(|| format!("malformed event from daemon: {}", buf.trim()))?;
-            let is_terminal = matches!(event.kind, EventKind::Done | EventKind::Error { .. });
+            let is_eos = matches!(event.kind, EventKind::Done | EventKind::Error { .. });
             on_event(event);
-            if is_terminal {
+            if is_eos {
                 break;
             }
         }
