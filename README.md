@@ -91,15 +91,17 @@ rdrop tag <hash>   --ring <ring-name>   # same, by BLAKE3 hash
 rdrop tag <hash>   --open
 ```
 
-### Share
+### Start the daemon
 
-Start the sharing node and make all authorised blobs available until `Ctrl-C`:
+`rdrop` serves blobs through a background daemon. Start it once; it keeps running until you stop it:
 
 ```sh
-rdrop share
+rdrop daemon start    # start in the background
+rdrop daemon status   # show status and node ID
+rdrop daemon stop     # stop the daemon
 ```
 
-Keep this running while peers download. The same node serves every blob that has been associated with a ring — there is no per-file serving step.
+The daemon serves every blob that has been associated with a ring — there is no per-file serving step to do.
 
 ### Receive a file
 
@@ -114,11 +116,11 @@ Re-run the same command to resume an interrupted transfer.
 By default only warnings are printed. Set `RUST_LOG` to get more detail:
 
 ```sh
-RUST_LOG=ringdrop=info rdrop share      # info-level logs for all ringdrop code
-RUST_LOG=debug rdrop share              # debug logs including iroh internals
+RUST_LOG=ringdrop=info rdrop daemon start   # info-level logs for all ringdrop code
+RUST_LOG=debug rdrop daemon start           # debug logs including iroh internals
 ```
 
-This applies to every command, not just `share`.
+This applies to every command, not just the daemon.
 
 ## Contributing
 
