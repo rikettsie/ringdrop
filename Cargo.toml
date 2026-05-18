@@ -20,7 +20,7 @@ name = "rdrop"
 path = "src/main.rs"
 
 [dependencies]
-iroh-rings = { version = "0.1.2", features = ["redb", "fs"] }
+iroh-rings = { git = "https://github.com/rikettsie/iroh-rings", branch = "fix/5-generic-resource-id-length-on-protocol", features = ["redb", "fs"] }
 
 # Core components: transport protocol, chunking, concurrency
 iroh = "0.98.2"

@@ -1947,9 +1947,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-rings"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cb9ef2f47d1ce1f2698373ff661262c35a4e33cc4c72ea60668def1f5e9b74b"
+version = "0.2.0"
+source = "git+https://github.com/rikettsie/iroh-rings?branch=fix%2F5-generic-resource-id-length-on-protocol#2dab27a509cf21c6eeb8fc587f33820bdddcff4c"
 dependencies = [
  "anyhow",
  "bao-tree",

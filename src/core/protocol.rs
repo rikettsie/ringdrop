@@ -19,7 +19,7 @@ use iroh_blobs::{
 };
 use tracing::info;
 
-pub(crate) use iroh_rings::protocol::{RingGate, Status, SC_ALPN};
+pub(crate) use iroh_rings::protocol::{encode_request, RingGate, Status, SC_ALPN};
 pub(crate) use iroh_rings::transfers::fs::encode_ranges_wire;
 
 const BAO_SIZE_HEADER: usize = size_of::<u64>();
@@ -103,7 +103,7 @@ impl RingReceiver {
         let missing = ChunkRanges::all();
 
         let (mut send, mut recv) = conn.open_bi().await?;
-        send.write_all(hash.as_bytes()).await?;
+        send.write_all(&encode_request(hash.as_bytes())?).await?;
         send.write_all(&encode_ranges_wire(&already_have)).await?;
         send.finish()?;
 
@@ -218,5 +218,27 @@ impl RingReceiver {
         }
         info!("export complete");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use iroh_blobs::Hash;
+
+    use super::encode_request;
+    use super::SC_ALPN;
+
+    #[test]
+    fn request_encoding_is_length_prefixed() {
+        let hash = Hash::from_bytes([0xab; 32]);
+        let encoded = encode_request(hash.as_bytes()).unwrap();
+        let len = u16::from_le_bytes(encoded[..2].try_into().unwrap());
+        assert_eq!(len as usize, 32);
+        assert_eq!(&encoded[2..], hash.as_bytes());
+    }
+
+    #[test]
+    fn sc_alpn_is_iroh_rings_v1() {
+        assert_eq!(SC_ALPN, b"/iroh-rings/1");
     }
 }
