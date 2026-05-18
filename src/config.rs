@@ -1,9 +1,18 @@
+//! Node configuration: identity key and daemon port.
+
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use iroh::{EndpointId, SecretKey};
 use serde::{Deserialize, Serialize};
 
+/// Persistent node configuration, stored as JSON in the data directory.
+///
+/// Loaded (or created) by [`Config::load_or_create`]. The `secret_key` is
+/// the node's long-term identity: it determines the [`EndpointId`] that peers
+/// see and add to their rings.
+///
+/// [`EndpointId`]: iroh::EndpointId
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub secret_key: SecretKey,
@@ -16,10 +25,19 @@ impl Config {
         60001
     }
 
+    /// Returns the [`EndpointId`] (Ed25519 public key) derived from the secret key.
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
     pub fn public_id(&self) -> EndpointId {
         self.secret_key.public()
     }
 
+    /// Load configuration from `data_dir/config.json`, creating it with a fresh
+    /// secret key if the file does not yet exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file exists but cannot be read or parsed.
     pub fn load_or_create(data_dir: &Path) -> Result<Self> {
         let path = data_dir.join("config.json");
         if path.exists() {

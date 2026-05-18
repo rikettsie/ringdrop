@@ -8,7 +8,7 @@ use crate::config::Config;
 use crate::core::Node;
 use crate::daemon::client::DaemonClient;
 use crate::daemon::protocol::{EventKind, Op};
-use crate::daemon::{pid, server::DaemonServer};
+use crate::daemon::server::DaemonServer;
 use iroh_rings::RedbRegistry;
 
 pub async fn run_start(data_dir: &Path) -> Result<()> {
@@ -80,7 +80,6 @@ pub async fn run_stop(data_dir: &Path) -> Result<()> {
     for _ in 0..30 {
         tokio::time::sleep(Duration::from_millis(100)).await;
         if !client.is_running().await {
-            pid::remove(data_dir);
             println!("Rdrop daemon stopped.");
             return Ok(());
         }
@@ -111,12 +110,7 @@ pub async fn run_serve(data_dir: &Path) -> Result<()> {
         RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
     let node = Node::start(data_dir, cfg, registry).await?;
 
-    pid::write(data_dir).context("writing PID file")?;
-
-    let result = DaemonServer::bind(node, port).await?.run().await;
-
-    pid::remove(data_dir);
-    result
+    DaemonServer::bind(node, port).await?.run().await
 }
 
 async fn query_node_info(client: &DaemonClient) -> Result<String> {

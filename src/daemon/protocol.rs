@@ -6,8 +6,8 @@ use uuid::Uuid;
 /// A request sent from a CLI client (or GUI) to the daemon over TCP.
 ///
 /// Each connection carries exactly one `Request` (newline-terminated JSON),
-/// followed by a stream of [`Event`]s from the daemon until [`Event::Done`]
-/// or [`Event::Error`].
+/// followed by a stream of [`Event`]s from the daemon until
+/// [`EventKind::Done`] or [`EventKind::Error`].
 ///
 /// `req_id` is echoed back on every response event, allowing a persistent
 /// connection to multiplex concurrent requests (e.g. a GUI importing several
@@ -19,56 +19,63 @@ pub struct Request {
     pub op: Op,
 }
 
+/// The operation to perform, carried inside a [`Request`].
+///
+/// Serialised as `{"op": "<snake_case_variant>", ...fields}`.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Op {
+    /// Return this node's [`EndpointId`] as a hex string.
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
     NodeId,
+    /// Import a file or directory and tag it with the given rings.
     Import {
         path: PathBuf,
         rings: Vec<String>,
         open: bool,
     },
+    /// List all blobs in the local store.
     BlobList,
-    BlobRemove {
-        target: String,
-    },
+    /// Remove a blob from the local store. `target` is a filename or hex hash.
+    BlobRemove { target: String },
+    /// Tag a blob with the given rings (or the open ring). `target` is a filename or hex hash.
     Tag {
         target: String,
         rings: Vec<String>,
         open: bool,
     },
-    Tags {
-        target: String,
-    },
-    RingNew {
-        name: String,
-    },
+    /// List the rings a blob is tagged with. `target` is a filename or hex hash.
+    Tags { target: String },
+    /// Create a new ring with the given name.
+    RingNew { name: String },
+    /// List all rings.
     RingList,
+    /// Add `peer` to `ring`, optionally under a human-readable `nickname`.
     RingAdd {
         ring: String,
         peer: String,
         nickname: Option<String>,
     },
-    RingRemove {
-        ring: String,
-        peer: String,
-    },
-    RingMembers {
-        ring: String,
-    },
+    /// Remove `peer` from `ring`.
+    RingRemove { ring: String, peer: String },
+    /// List all members of `ring`.
+    RingMembers { ring: String },
+    /// Download the blob described by `ticket` and export it to `dest`.
     Receive {
         ticket: String,
         dest: PathBuf,
         force_overwrite: bool,
     },
+    /// Gracefully stop the daemon after draining in-flight requests.
     Shutdown,
 }
 
 /// An event streamed from the daemon to the client.
 ///
 /// The daemon sends one or more events per request, always ending with
-/// [`Event::Done`] or [`Event::Error`]. `req_id` matches the value sent in
-/// the originating [`Request`], enabling multiplexed connections.
+/// [`EventKind::Done`] or [`EventKind::Error`]. `req_id` matches the value
+/// sent in the originating [`Request`], enabling multiplexed connections.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Event {
     pub req_id: Uuid,
@@ -90,6 +97,7 @@ pub enum EventKind {
 }
 
 impl Event {
+    /// Construct a [`EventKind::Line`] event carrying a text message.
     pub fn line(req_id: Uuid, text: impl Into<String>) -> Self {
         Self {
             req_id,
@@ -97,6 +105,7 @@ impl Event {
         }
     }
 
+    /// Construct a [`EventKind::Progress`] event with byte counts.
     pub fn progress(req_id: Uuid, done: u64, total: u64) -> Self {
         Self {
             req_id,
@@ -104,6 +113,7 @@ impl Event {
         }
     }
 
+    /// Construct a [`EventKind::Done`] event signalling successful completion.
     pub fn done(req_id: Uuid) -> Self {
         Self {
             req_id,
@@ -111,6 +121,7 @@ impl Event {
         }
     }
 
+    /// Construct an [`EventKind::Error`] event carrying a human-readable message.
     pub fn error(req_id: Uuid, message: impl Into<String>) -> Self {
         Self {
             req_id,

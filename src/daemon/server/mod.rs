@@ -1,3 +1,14 @@
+//! TCP-based IPC server that wraps a [`Node`] and dispatches [`Op`]s.
+//!
+//! Each accepted TCP connection carries exactly one [`Request`] (newline-
+//! terminated JSON). The server deserialises it, dispatches to the appropriate
+//! handler, and streams [`Event`]s back until the operation completes.
+//!
+//! [`Node`]: crate::core::Node
+//! [`Op`]: crate::daemon::protocol::Op
+//! [`Request`]: crate::daemon::protocol::Request
+//! [`Event`]: crate::daemon::protocol::Event
+
 mod handlers;
 
 use std::sync::Arc;
@@ -17,6 +28,16 @@ use crate::core::Node;
 use crate::daemon::protocol::{Event, Op, Request};
 use iroh_rings::RedbRegistry;
 
+/// The background daemon server.
+///
+/// Listens on a local TCP socket and serves [`Op`] requests from
+/// [`DaemonClient`]s. Each accepted connection is handled in a separate
+/// Tokio task; an [`Op::Shutdown`] request drains in-flight tasks (up to 30 s)
+/// then shuts the node down cleanly.
+///
+/// [`Op`]: crate::daemon::protocol::Op
+/// [`DaemonClient`]: crate::daemon::client::DaemonClient
+/// [`Op::Shutdown`]: crate::daemon::protocol::Op::Shutdown
 pub struct DaemonServer {
     node: Arc<Node<RedbRegistry>>,
     listener: TcpListener,
@@ -24,6 +45,11 @@ pub struct DaemonServer {
 }
 
 impl DaemonServer {
+    /// Bind the daemon to `127.0.0.1:port` (use `0` to let the OS pick a port).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the port is already in use.
     pub async fn bind(node: Node<RedbRegistry>, port: u16) -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
@@ -36,10 +62,24 @@ impl DaemonServer {
         })
     }
 
+    /// Returns the port the server is actually listening on.
+    ///
+    /// Useful when the server was bound on port `0`.
     pub fn local_port(&self) -> u16 {
         self.listener.local_addr().unwrap().port()
     }
 
+    /// Run the server event loop until an [`Op::Shutdown`] request is received.
+    ///
+    /// Accepts connections, dispatches requests, and on shutdown drains
+    /// in-flight tasks (up to 30 s) before calling [`Node::shutdown`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the TCP accept loop fails or the node shutdown fails.
+    ///
+    /// [`Op::Shutdown`]: crate::daemon::protocol::Op::Shutdown
+    /// [`Node::shutdown`]: crate::core::Node::shutdown
     pub async fn run(self) -> Result<()> {
         let mut tasks: JoinSet<()> = JoinSet::new();
         loop {

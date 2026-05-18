@@ -3,13 +3,16 @@ resolver = "2"
 
 [package]
 name = "ringdrop"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Enrico Fusto"]
 license = "MIT"
 description = "P2P streamed file transfer with ring-based access control, built on iroh and bao protocols"
 repository = "https://github.com/rikettsie/ringdrop"
-keywords = ["p2p", "cli", "file-transfer", "ring-authorization", "hole-punching"]
+keywords = ["p2p", "cli", "file-transfer", "ring-authorization", "holepunching"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lib]
 name = "ringdrop"
@@ -20,7 +23,7 @@ name = "rdrop"
 path = "src/main.rs"
 
 [dependencies]
-iroh-rings = { version = "0.1.2", features = ["redb", "fs"] }
+iroh-rings = { version = "0.2.0", features = ["redb", "fs"] }
 
 # Core components: transport protocol, chunking, concurrency
 iroh = "0.98.2"

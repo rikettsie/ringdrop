@@ -30,6 +30,15 @@ use crate::config::Config;
 use iroh_rings::FsTransfer;
 use iroh_rings::Registry;
 
+/// A ringdrop P2P node.
+///
+/// Owns an iroh QUIC [`Endpoint`], an iroh-blobs [`FsStore`], a `RingGate`
+/// that enforces ring-based access control, and the [`Registry`] that tracks
+/// ring membership.
+///
+/// Create a node with [`Node::start`]; shut it down cleanly with
+/// [`Node::shutdown`] so the blob store is flushed to disk before the process
+/// exits.
 pub struct Node<R> {
     pub endpoint: Endpoint,
     pub store: FsStore,
@@ -38,6 +47,16 @@ pub struct Node<R> {
 }
 
 impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
+    /// Start a node, binding a QUIC endpoint and loading the blob store from `data_dir`.
+    ///
+    /// The node is immediately reachable for inbound connections once this
+    /// returns. The blob store is created under `data_dir/blobs/` if it does
+    /// not yet exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the QUIC endpoint cannot bind, or if the blob store
+    /// cannot be opened or created.
     pub async fn start(data_dir: impl AsRef<Path>, cfg: Config, registry: R) -> Result<Self> {
         let data_dir = data_dir.as_ref().to_path_buf();
         tokio::fs::create_dir_all(&data_dir).await?;
@@ -84,10 +103,19 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         })
     }
 
+    /// Returns the network address of this node (relay URL + node ID).
     pub fn node_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
     }
 
+    /// Import a single file into the blob store.
+    ///
+    /// The file is chunked, BLAKE3-hashed, and pinned with a named tag (the
+    /// filename). Returns the root hash and `BlobFormat::Raw`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the store operation fails.
     pub async fn import_file(&self, path: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
         let path = std::path::absolute(path.as_ref())?;
         info!(path = %path.display(), "importing file");
@@ -116,6 +144,15 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok((hash, format))
     }
 
+    /// Import a directory into the blob store as an iroh-blobs collection.
+    ///
+    /// Each file under `dir` is imported individually; the resulting hashes are
+    /// assembled into a `HashSeq` collection pinned under the directory name.
+    /// Returns the collection root hash and `BlobFormat::HashSeq`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file cannot be read or the store operation fails.
     pub async fn import_directory(&self, dir: impl AsRef<Path>) -> Result<(Hash, BlobFormat)> {
         let dir = dir.as_ref();
         info!(dir = %dir.display(), "importing directory");
@@ -167,7 +204,11 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok((hash, format))
     }
 
-    /// List all blobs that have been imported (hash + format + tag name).
+    /// List all blobs in the local store as `(hash, format, tag_name)` triples.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag store cannot be read.
     pub async fn list_blobs(&self) -> Result<Vec<(Hash, BlobFormat, String)>> {
         let mut stream = self.store.tags().list().await?;
         let mut blobs = Vec::new();
@@ -179,8 +220,15 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok(blobs)
     }
 
-    /// Remove a blob from the store. Ring tags must be removed separately via the registry.
-    /// Actual disk reclamation happens on the next GC cycle (during `rdrop share`).
+    /// Remove a blob from the local store by deleting its named tags.
+    ///
+    /// Ring tags in the registry must be removed separately. Disk space is
+    /// reclaimed on the next GC cycle (every 30 s while the node is running).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no tag is found for the given hash, or if the tag
+    /// deletion fails.
     pub async fn delete_blob(&self, hash: Hash) -> Result<()> {
         let mut stream = self.store.tags().list().await?;
         let mut to_delete = Vec::new();
@@ -204,6 +252,10 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok(())
     }
 
+    /// Build a [`ShareTicket`] for a locally-stored blob.
+    ///
+    /// The ticket embeds the relay URL and node ID but omits direct IP
+    /// addresses — tickets remain valid across daemon restarts and IP changes.
     pub fn make_ticket(&self, hash: Hash, format: BlobFormat, name: Option<String>) -> ShareTicket {
         let full_addr = self.node_addr();
         // Omit direct IP addresses: tickets are long-lived and may be used after the
@@ -221,6 +273,12 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         }
     }
 
+    /// Import a file or directory, dispatching to [`Node::import_file`] or
+    /// [`Node::import_directory`] based on whether `path` is a file or a dir.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the import fails (see the individual methods for details).
     pub async fn import_path(&self, path: &std::path::Path) -> Result<(Hash, BlobFormat)> {
         if path.is_dir() {
             self.import_directory(path).await
@@ -229,10 +287,26 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         }
     }
 
+    /// Download the blob described by `ticket` and export it under `dest`.
+    ///
+    /// If the blob is already complete in the local store the download is
+    /// skipped entirely. For collections, each member blob is fetched
+    /// individually before the directory is reassembled on disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the remote peer denies access, the connection
+    /// cannot be established, or the export to disk fails.
     pub async fn download(&self, ticket: &ShareTicket, dest: impl AsRef<Path>) -> Result<()> {
         self.download_impl(ticket, dest, |_, _| {}).await
     }
 
+    /// Like [`Node::download`], but calls `on_progress(bytes_done, total_bytes)`
+    /// as each chunk is received, suitable for driving a progress bar.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error under the same conditions as [`Node::download`].
     pub async fn download_with_progress<F: Fn(u64, u64) + Send + Sync>(
         &self,
         ticket: &ShareTicket,
@@ -292,6 +366,15 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
             .await
     }
 
+    /// Shut down the node, flushing all pending blob-store writes to disk.
+    ///
+    /// Must be called before the process exits to avoid data loss: the
+    /// iroh-blobs store batches redb transactions and `sync_db` waits for all
+    /// of them to commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the router shutdown or the blob-store flush fails.
     pub async fn shutdown(self) -> Result<()> {
         self.router.shutdown().await?;
         // FsStore batches writes; the RPC ack for set/import arrives before

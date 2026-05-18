@@ -10,17 +10,30 @@ use uuid::Uuid;
 use super::protocol::{Event, EventKind, Op, Request};
 use super::MAX_LINE_BYTES;
 
+/// A lightweight TCP client for talking to a running [`DaemonServer`].
+///
+/// Each call to [`DaemonClient::send`] opens a new TCP connection, sends one
+/// [`Op`] as a JSON line, and reads back [`Event`]s until the stream ends
+/// with [`EventKind::Done`] or [`EventKind::Error`].
+///
+/// [`DaemonServer`]: crate::daemon::server::DaemonServer
+/// [`Op`]: crate::daemon::protocol::Op
+/// [`Event`]: crate::daemon::protocol::Event
+/// [`EventKind::Done`]: crate::daemon::protocol::EventKind::Done
+/// [`EventKind::Error`]: crate::daemon::protocol::EventKind::Error
 pub struct DaemonClient {
     addr: SocketAddr,
 }
 
 impl DaemonClient {
+    /// Create a client that connects to the daemon on `127.0.0.1:port`.
     pub fn new(port: u16) -> Self {
         Self {
             addr: SocketAddr::from(([127, 0, 0, 1], port)),
         }
     }
 
+    /// Returns `true` if a TCP connection to the daemon address succeeds.
     pub async fn is_running(&self) -> bool {
         TcpStream::connect(self.addr).await.is_ok()
     }

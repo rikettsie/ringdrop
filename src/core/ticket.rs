@@ -12,6 +12,12 @@ struct TicketWire {
     name: Option<String>,
 }
 
+/// An out-of-band transfer ticket that encodes everything a receiver needs.
+///
+/// Tickets are serialised to a `rdrop://` URI (base32-encoded JSON) for easy
+/// copy-paste. Pass one to [`Node::download`] to fetch the blob.
+///
+/// [`Node::download`]: crate::core::Node::download
 #[derive(Debug, Clone)]
 pub struct ShareTicket {
     addr: EndpointAddr,
@@ -21,6 +27,7 @@ pub struct ShareTicket {
 }
 
 impl ShareTicket {
+    /// Create a ticket for a single raw blob (`BlobFormat::Raw`).
     pub fn new(addr: EndpointAddr, hash: Hash, name: Option<String>) -> Self {
         ShareTicket {
             addr,
@@ -30,6 +37,7 @@ impl ShareTicket {
         }
     }
 
+    /// Create a ticket for a directory / collection (`BlobFormat::HashSeq`).
     pub fn new_collection(addr: EndpointAddr, hash: Hash, name: Option<String>) -> Self {
         ShareTicket {
             addr,
@@ -39,19 +47,35 @@ impl ShareTicket {
         }
     }
 
+    /// Returns the BLAKE3 root hash of the blob or collection.
     pub fn hash(&self) -> Hash {
         self.hash
     }
+
+    /// Returns the blob format (`Raw` for files, `HashSeq` for directories).
     pub fn format(&self) -> BlobFormat {
         self.format
     }
+
+    /// Returns the network address of the node that issued this ticket.
     pub fn node_addr(&self) -> &EndpointAddr {
         &self.addr
     }
+
+    /// Returns the [`EndpointId`] (Ed25519 public key) of the issuing node.
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
     pub fn peer_id(&self) -> EndpointId {
         self.addr.id
     }
 
+    /// Encode the ticket as a `rdrop://` URI.
+    ///
+    /// The URI is base32-encoded JSON and can be decoded with [`ShareTicket::from_uri`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ticket cannot be serialised to JSON.
     pub fn to_uri(&self) -> Result<String> {
         let wire = TicketWire {
             addr: self.addr.clone(),
@@ -64,6 +88,12 @@ impl ShareTicket {
         Ok(format!("rdrop://{encoded}"))
     }
 
+    /// Decode a `rdrop://` URI produced by [`ShareTicket::to_uri`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the URI is missing the `rdrop://` prefix, the
+    /// base32 payload cannot be decoded, or the inner JSON is malformed.
     pub fn from_uri(s: &str) -> Result<Self> {
         let encoded = s
             .strip_prefix("rdrop://")
