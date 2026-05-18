@@ -1948,7 +1948,8 @@ dependencies = [
 [[package]]
 name = "iroh-rings"
 version = "0.2.0"
-source = "git+https://github.com/rikettsie/iroh-rings?branch=fix%2F5-generic-resource-id-length-on-protocol#2dab27a509cf21c6eeb8fc587f33820bdddcff4c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd2b121fa0a26b0678a9c5d0168fbf4c8a2582d4ad534f4fb14d44a8a150be5a"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -3200,7 +3201,7 @@ dependencies = [
 
 [[package]]
 name = "ringdrop"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "bao-tree",
