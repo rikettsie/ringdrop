@@ -11,18 +11,18 @@
 //! └──────────────────────────┬──────────────────────────┘
 //!                            │
 //!                         Node<R>
-//!                     ┌──────┴───────┐
-//!                Endpoint         FsStore
-//!              (QUIC/iroh)      (iroh-blobs)
-//!                     └──────┬───────┘
+//!                 ┌──────────┼──────────┐
+//!            Endpoint     FsStore    Registry
+//!          (QUIC/iroh)  (iroh-blobs)   (R)
+//!                 └──────────┬──────────┘
 //!                         RingGate
-//!             (iroh-rings, ALPN /iroh-rings/1)
+//!              (iroh-rings, ALPN /iroh-rings/1)
 //! ```
 //!
 //! A [`core::Node`] wraps an iroh QUIC endpoint, an iroh-blobs persistent blob
-//! store, and a `RingGate` that enforces ring-based access control: a blob is
-//! only served to a peer whose [`EndpointId`] is a member of at least one ring
-//! the blob has been tagged with.
+//! store, a `Registry` that tracks ring membership, and a `RingGate` that
+//! enforces access control: a blob is only served to a peer whose
+//! [`EndpointId`] is a member of at least one ring the blob is tagged with.
 //!
 //! The [`daemon`] module runs a `Node` as a background TCP server so that the
 //! CLI can talk to it over a local IPC connection.
