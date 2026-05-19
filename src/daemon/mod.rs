@@ -12,6 +12,6 @@ pub mod client;
 pub mod protocol;
 pub mod server;
 
-/// Maximum byte length of a single IPC request or response line
-/// in the wire protocol.
+// 512 KiB covers any realistic JSON request (long --data-dir paths, many
+// --ring flags, long ticket URIs) while still bounding per-connection memory.
 pub(crate) const MAX_LINE_BYTES: usize = 512 * 1024;

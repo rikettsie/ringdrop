@@ -6,7 +6,7 @@ use crate::daemon::protocol::Op;
 
 use super::BlobCmd;
 
-pub async fn run_import(
+pub(crate) async fn run_import(
     path: PathBuf,
     rings: Vec<String>,
     open: bool,
@@ -17,7 +17,7 @@ pub async fn run_import(
         .await
 }
 
-pub async fn run(cmd: BlobCmd, data_dir: &Path) -> Result<()> {
+pub(crate) async fn run(cmd: BlobCmd, data_dir: &Path) -> Result<()> {
     let client = super::daemon_client(data_dir)?;
     match cmd {
         BlobCmd::Import { path, rings, open } => client.run(Op::Import { path, rings, open }).await,

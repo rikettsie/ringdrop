@@ -1,3 +1,7 @@
+#![deny(elided_lifetimes_in_paths)]
+#![deny(unreachable_pub)]
+#![warn(missing_docs)]
+
 //! # ringdrop
 //!
 //! P2P file transfer with ring-based access control, built on [iroh] (QUIC +

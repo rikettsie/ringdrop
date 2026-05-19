@@ -1,19 +1,18 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use iroh_rings::{RedbRegistry, Registry, OPEN_RING_NAME};
+use iroh_rings::{Registry, OPEN_RING_NAME};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::core::Node;
 use crate::daemon::protocol::Event;
-use crate::util::parse_hash;
 
-use super::send;
+use super::{resolve_target, send};
 
-pub async fn handle_import(
+pub(crate) async fn handle_import<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
     path: PathBuf,
     rings: Vec<String>,
@@ -101,9 +100,9 @@ pub async fn handle_import(
     Ok(())
 }
 
-pub async fn handle_blob_list(
+pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
 ) -> Result<()> {
     let blobs = node.list_blobs().await?;
@@ -137,19 +136,13 @@ pub async fn handle_blob_list(
     Ok(())
 }
 
-pub async fn handle_blob_remove(
+pub(crate) async fn handle_blob_remove<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
     target: String,
 ) -> Result<()> {
-    let path = PathBuf::from(&target);
-    let hash = if path.exists() {
-        let (hash, _) = node.import_path(&path).await?;
-        hash
-    } else {
-        parse_hash(&target)?
-    };
+    let hash = resolve_target(node, &target).await?;
     node.registry.remove_ring_from_resource(*hash.as_bytes())?;
     node.delete_blob(hash).await?;
     send(tx, Event::line(req_id, format!("Removed {hash}"))).await;

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use iroh_rings::RedbRegistry;
+use iroh_rings::Registry;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -10,9 +10,9 @@ use crate::daemon::protocol::Event;
 
 use super::send;
 
-pub async fn handle_receive(
+pub(crate) async fn handle_receive<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
     ticket_str: String,
     dest: PathBuf,

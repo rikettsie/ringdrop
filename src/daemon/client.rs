@@ -1,3 +1,7 @@
+//! Lightweight TCP client for sending IPC operations to a running [`DaemonServer`].
+//!
+//! [`DaemonServer`]: crate::daemon::server::DaemonServer
+
 use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
@@ -82,8 +86,9 @@ impl DaemonClient {
         Ok(())
     }
 
-    /// Convenience wrapper: prints [`EventKind::Line`] events to stdout and
-    /// converts [`EventKind::Error`] into an `anyhow` error.
+    /// Convenience wrapper: prints [`EventKind::Line`] events to stdout,
+    /// converts [`EventKind::Error`] into an `anyhow` error, and silently
+    /// discards [`EventKind::Progress`] events.
     pub async fn run(&self, op: Op) -> Result<()> {
         let mut err: Option<String> = None;
         self.send(op, |event| match event.kind {

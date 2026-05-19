@@ -64,6 +64,12 @@ struct Cli {
     command: Cmd,
 }
 
+/// Parse CLI arguments and dispatch the requested command to the daemon.
+///
+/// # Errors
+///
+/// Returns an error if the command fails (connection refused, daemon not
+/// running, invalid arguments, etc.).
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
 

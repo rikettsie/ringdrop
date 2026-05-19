@@ -3,7 +3,7 @@ use iroh_rings::{Registry, OPEN_RING_NAME};
 
 use crate::util::parse_peer_id;
 
-pub fn ring_new_lines(registry: &impl Registry, name: &str) -> Result<Vec<String>> {
+pub(crate) fn ring_new_lines(registry: &impl Registry, name: &str) -> Result<Vec<String>> {
     registry.create_ring(name)?;
     Ok(vec![
         format!("Ring created: {name}"),
@@ -11,7 +11,7 @@ pub fn ring_new_lines(registry: &impl Registry, name: &str) -> Result<Vec<String
     ])
 }
 
-pub fn ring_list_lines(registry: &impl Registry) -> Result<Vec<String>> {
+pub(crate) fn ring_list_lines(registry: &impl Registry) -> Result<Vec<String>> {
     let rings = registry.list_rings()?;
     let mut out = vec![format!("{} rings:", rings.len())];
     for r in rings {
@@ -28,7 +28,7 @@ pub fn ring_list_lines(registry: &impl Registry) -> Result<Vec<String>> {
     Ok(out)
 }
 
-pub fn ring_add_lines(
+pub(crate) fn ring_add_lines(
     registry: &impl Registry,
     public_id: iroh::EndpointId,
     ring: &str,
@@ -52,7 +52,11 @@ pub fn ring_add_lines(
     Ok(vec![line])
 }
 
-pub fn ring_remove_lines(registry: &impl Registry, ring: &str, peer: &str) -> Result<Vec<String>> {
+pub(crate) fn ring_remove_lines(
+    registry: &impl Registry,
+    ring: &str,
+    peer: &str,
+) -> Result<Vec<String>> {
     if ring == OPEN_RING_NAME {
         return Ok(vec![
             "The open ring has no membership list to remove from.".to_owned()
@@ -63,7 +67,7 @@ pub fn ring_remove_lines(registry: &impl Registry, ring: &str, peer: &str) -> Re
     Ok(vec![format!("Removed {peer_id} from ring {ring}")])
 }
 
-pub fn ring_members_lines(registry: &impl Registry, ring: &str) -> Result<Vec<String>> {
+pub(crate) fn ring_members_lines(registry: &impl Registry, ring: &str) -> Result<Vec<String>> {
     if ring == OPEN_RING_NAME {
         return Ok(vec![
             "The open ring is public — any peer may access blobs tagged with it.".to_owned(),

@@ -11,15 +11,15 @@ pub(crate) fn daemon_client(data_dir: &Path) -> Result<DaemonClient> {
     Ok(DaemonClient::new(port))
 }
 
-pub mod blob;
-pub mod daemon;
-pub mod id;
-pub mod receive;
-pub mod ring;
-pub mod tag;
+pub(super) mod blob;
+pub(super) mod daemon;
+pub(super) mod id;
+pub(super) mod receive;
+pub(super) mod ring;
+pub(super) mod tag;
 
 #[derive(Subcommand)]
-pub enum Cmd {
+pub(super) enum Cmd {
     /// Manage rings
     #[command(subcommand)]
     Ring(RingCmd),
@@ -86,7 +86,7 @@ pub enum Cmd {
 }
 
 #[derive(Subcommand)]
-pub enum DaemonCmd {
+pub(super) enum DaemonCmd {
     /// Start the daemon in the background
     Start,
     /// Stop a running daemon
@@ -99,7 +99,7 @@ pub enum DaemonCmd {
 }
 
 #[derive(Subcommand)]
-pub enum BlobCmd {
+pub(super) enum BlobCmd {
     /// Import a file or directory into the blob store and print a ticket
     Import {
         /// Path to import (file or directory)
@@ -125,7 +125,7 @@ pub enum BlobCmd {
 }
 
 #[derive(Subcommand)]
-pub enum RingCmd {
+pub(super) enum RingCmd {
     /// Create a new ring with the given name
     New {
         /// Name for the ring (e.g. "friends", "work-team")

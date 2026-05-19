@@ -6,7 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use crate::core::ShareTicket;
 use crate::daemon::protocol::{EventKind, Op};
 
-pub fn check_dest(
+pub(crate) fn check_dest(
     dest: &Path,
     name: Option<&str>,
     hash_hex: &str,
@@ -27,7 +27,7 @@ pub fn check_dest(
     Ok(expected)
 }
 
-pub async fn run(
+pub(crate) async fn run(
     ticket_str: &str,
     dest: PathBuf,
     force_overwrite: bool,

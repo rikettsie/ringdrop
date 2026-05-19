@@ -23,6 +23,7 @@ pub struct ShareTicket {
     addr: EndpointAddr,
     hash: Hash,
     format: BlobFormat,
+    /// Human-readable display name, typically the original filename; `None` when unknown.
     pub name: Option<String>,
 }
 

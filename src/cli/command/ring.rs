@@ -6,7 +6,7 @@ use crate::daemon::protocol::Op;
 
 use super::RingCmd;
 
-pub async fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
+pub(crate) async fn run(cmd: RingCmd, data_dir: &Path) -> Result<()> {
     let client = super::daemon_client(data_dir)?;
     let op = match cmd {
         RingCmd::New { name } => Op::RingNew { name },

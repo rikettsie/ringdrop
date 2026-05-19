@@ -22,6 +22,8 @@ use tracing::info;
 pub(crate) use iroh_rings::protocol::{encode_request, RingGate, Status, SC_ALPN};
 pub(crate) use iroh_rings::transfers::fs::encode_ranges_wire;
 
+// export_bao emits an 8-byte little-endian content size before the bao tree,
+// so the receiver knows the total before any leaf data arrives.
 const BAO_SIZE_HEADER: usize = size_of::<u64>();
 
 pub(crate) struct RingReceiver {

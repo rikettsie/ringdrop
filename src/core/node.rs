@@ -40,8 +40,11 @@ use iroh_rings::Registry;
 /// [`Node::shutdown`] so the blob store is flushed to disk before the process
 /// exits.
 pub struct Node<R> {
+    /// The iroh QUIC endpoint — manages connections, NAT traversal, and relay fallback.
     pub endpoint: Endpoint,
+    /// The iroh-blobs persistent store — holds all locally imported and received blobs.
     pub store: FsStore,
+    /// The ring registry — tracks ring membership and per-blob access tags.
     pub registry: R,
     router: Router,
 }
@@ -111,7 +114,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
     /// Import a single file into the blob store.
     ///
     /// The file is chunked, BLAKE3-hashed, and pinned with a named tag (the
-    /// filename). Returns the root hash and `BlobFormat::Raw`.
+    /// leaf filename, i.e. `path.file_name()`). Returns the root hash and `BlobFormat::Raw`.
     ///
     /// # Errors
     ///
@@ -222,8 +225,9 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
 
     /// Remove a blob from the local store by deleting its named tags.
     ///
-    /// Ring tags in the registry must be removed separately. Disk space is
-    /// reclaimed on the next GC cycle (every 30 s while the node is running).
+    /// Ring tags in the registry must be removed separately by the caller
+    /// before invoking this method. Disk space is reclaimed on the next GC
+    /// cycle (every 30 s while the node is running).
     ///
     /// # Errors
     ///

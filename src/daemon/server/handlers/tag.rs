@@ -1,19 +1,16 @@
-use std::path::PathBuf;
-
 use anyhow::Result;
-use iroh_rings::{RedbRegistry, Registry, OPEN_RING_NAME};
+use iroh_rings::{Registry, OPEN_RING_NAME};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::core::Node;
 use crate::daemon::protocol::Event;
-use crate::util::parse_hash;
 
-use super::send;
+use super::{resolve_target, send};
 
-pub async fn handle_tag(
+pub(crate) async fn handle_tag<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
     target: String,
     rings: Vec<String>,
@@ -27,13 +24,7 @@ pub async fn handle_tag(
         );
     }
 
-    let path = PathBuf::from(&target);
-    let hash = if path.exists() {
-        let (hash, _) = node.import_path(&path).await?;
-        hash
-    } else {
-        parse_hash(&target)?
-    };
+    let hash = resolve_target(node, &target).await?;
     for ring in &rings {
         node.registry.add_ring_to_resource(*hash.as_bytes(), ring)?;
         send(
@@ -58,19 +49,13 @@ pub async fn handle_tag(
     Ok(())
 }
 
-pub async fn handle_tags(
+pub(crate) async fn handle_tags<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
     target: String,
 ) -> Result<()> {
-    let path = PathBuf::from(&target);
-    let hash = if path.exists() {
-        let (hash, _) = node.import_path(&path).await?;
-        hash
-    } else {
-        parse_hash(&target)?
-    };
+    let hash = resolve_target(node, &target).await?;
     let rings = node.registry.list_resource_rings(*hash.as_bytes())?;
     if rings.is_empty() {
         send(

@@ -1,3 +1,5 @@
+//! IPC protocol types: [`Request`], [`Op`], [`Event`], and [`EventKind`].
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +16,9 @@ use uuid::Uuid;
 /// files simultaneously).
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Request {
+    /// Unique identifier echoed on every response event for this request.
     pub req_id: Uuid,
+    /// The operation to perform.
     #[serde(flatten)]
     pub op: Op,
 }
@@ -31,40 +35,75 @@ pub enum Op {
     NodeId,
     /// Import a file or directory and tag it with the given rings.
     Import {
+        /// Path to the file or directory to import.
         path: PathBuf,
+        /// Ring names to tag the blob with (ignored when `open` is `true`).
         rings: Vec<String>,
+        /// Tag the blob as publicly accessible, overriding `rings`.
         open: bool,
     },
     /// List all blobs in the local store.
     BlobList,
     /// Remove a blob from the local store. `target` is a filename or hex hash.
-    BlobRemove { target: String },
+    BlobRemove {
+        /// File path or BLAKE3 hex hash identifying the blob to remove.
+        target: String,
+    },
     /// Tag a blob with the given rings (or the open ring). `target` is a filename or hex hash.
     Tag {
+        /// File path or BLAKE3 hex hash identifying the blob to tag.
         target: String,
+        /// Ring names to apply (ignored when `open` is `true`).
         rings: Vec<String>,
+        /// Tag the blob as publicly accessible, overriding `rings`.
         open: bool,
     },
     /// List the rings a blob is tagged with. `target` is a filename or hex hash.
-    Tags { target: String },
+    Tags {
+        /// File path or BLAKE3 hex hash identifying the blob to inspect.
+        target: String,
+    },
     /// Create a new ring with the given name.
-    RingNew { name: String },
+    RingNew {
+        /// Name for the new ring (e.g. `"friends"` or `"work-team"`).
+        name: String,
+    },
     /// List all rings.
     RingList,
     /// Add `peer` to `ring`, optionally under a human-readable `nickname`.
     RingAdd {
+        /// Name of the ring to add the peer to.
         ring: String,
+        /// Base32 [`EndpointId`] string of the peer to add.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
         peer: String,
+        /// Optional human-readable label for this peer.
         nickname: Option<String>,
     },
     /// Remove `peer` from `ring`.
-    RingRemove { ring: String, peer: String },
+    RingRemove {
+        /// Name of the ring to remove the peer from.
+        ring: String,
+        /// Base32 [`EndpointId`] string of the peer to remove.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+    },
     /// List all members of `ring`.
-    RingMembers { ring: String },
+    RingMembers {
+        /// Name of the ring whose membership to list.
+        ring: String,
+    },
     /// Download the blob described by `ticket` and export it to `dest`.
     Receive {
+        /// URI-encoded [`ShareTicket`] produced by `rdrop import` or `rdrop blob list`.
+        ///
+        /// [`ShareTicket`]: crate::core::ShareTicket
         ticket: String,
+        /// Filesystem path to write the received file or directory to.
         dest: PathBuf,
+        /// Overwrite an existing destination without prompting.
         force_overwrite: bool,
     },
     /// Gracefully stop the daemon after draining in-flight requests.
@@ -78,22 +117,36 @@ pub enum Op {
 /// sent in the originating [`Request`], enabling multiplexed connections.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Event {
+    /// Matches the [`Request::req_id`] that triggered this event.
     pub req_id: Uuid,
+    /// The event payload.
     #[serde(flatten)]
     pub kind: EventKind,
 }
 
+/// The payload of a daemon [`Event`].
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventKind {
     /// Line of text to be printed to stdout (by a console process) or rendered (by a GUI).
-    Line { text: String },
+    Line {
+        /// The line of text to display.
+        text: String,
+    },
     /// Download/upload progress indicator for long-running transfers.
-    Progress { done: u64, total: u64 },
+    Progress {
+        /// Bytes received or sent so far.
+        done: u64,
+        /// Total expected bytes.
+        total: u64,
+    },
     /// Signal of request completed successfully; no further events will follow for this req_id.
     Done,
     /// Signal of request failed; no further events will follow for this req_id.
-    Error { message: String },
+    Error {
+        /// Human-readable description of the failure.
+        message: String,
+    },
 }
 
 impl Event {

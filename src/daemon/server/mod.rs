@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use futures_lite::StreamExt;
+use iroh_rings::Registry;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Notify};
@@ -26,7 +27,6 @@ use uuid::Uuid;
 
 use crate::core::Node;
 use crate::daemon::protocol::{Event, Op, Request};
-use iroh_rings::RedbRegistry;
 
 /// The background daemon server.
 ///
@@ -38,19 +38,19 @@ use iroh_rings::RedbRegistry;
 /// [`Op`]: crate::daemon::protocol::Op
 /// [`DaemonClient`]: crate::daemon::client::DaemonClient
 /// [`Op::Shutdown`]: crate::daemon::protocol::Op::Shutdown
-pub struct DaemonServer {
-    node: Arc<Node<RedbRegistry>>,
+pub struct DaemonServer<R> {
+    node: Arc<Node<R>>,
     listener: TcpListener,
     shutdown: Arc<Notify>,
 }
 
-impl DaemonServer {
+impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
     /// Bind the daemon to `127.0.0.1:port` (use `0` to let the OS pick a port).
     ///
     /// # Errors
     ///
     /// Returns an error if the port is already in use.
-    pub async fn bind(node: Node<RedbRegistry>, port: u16) -> Result<Self> {
+    pub async fn bind(node: Node<R>, port: u16) -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
             .map_err(|e| anyhow::anyhow!("cannot bind to port {port}: {e}"))?;
@@ -64,9 +64,12 @@ impl DaemonServer {
 
     /// Returns the port the server is actually listening on.
     ///
-    /// Useful when the server was bound on port `0`.
+    /// Useful when bound on port `0` (OS-assigned ephemeral port).
     pub fn local_port(&self) -> u16 {
-        self.listener.local_addr().unwrap().port()
+        self.listener
+            .local_addr()
+            .expect("listener is bound")
+            .port()
     }
 
     /// Run the server event loop until an [`Op::Shutdown`] request is received.
@@ -121,9 +124,9 @@ impl DaemonServer {
 
 use super::MAX_LINE_BYTES;
 
-async fn handle_connection(
+async fn handle_connection<R: Registry + Clone + Send + Sync + 'static>(
     stream: TcpStream,
-    node: Arc<Node<RedbRegistry>>,
+    node: Arc<Node<R>>,
     shutdown: Arc<Notify>,
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
@@ -189,10 +192,10 @@ async fn emit(writer: &mut (impl AsyncWriteExt + Unpin), event: &Event) -> bool 
         .is_ok()
 }
 
-async fn dispatch(
+async fn dispatch<R: Registry + Clone + Send + Sync + 'static>(
     op: Op,
     req_id: Uuid,
-    node: Arc<Node<RedbRegistry>>,
+    node: Arc<Node<R>>,
     tx: mpsc::Sender<Event>,
     shutdown: Arc<Notify>,
 ) {
@@ -210,10 +213,10 @@ async fn dispatch(
     }
 }
 
-async fn handle_op(
+async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
     op: Op,
     req_id: Uuid,
-    node: &Node<RedbRegistry>,
+    node: &Node<R>,
     tx: &mpsc::Sender<Event>,
 ) -> Result<()> {
     match op {

@@ -15,7 +15,11 @@ use serde::{Deserialize, Serialize};
 /// [`EndpointId`]: iroh::EndpointId
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
+    /// Long-term Ed25519 secret key; determines the [`EndpointId`] peers add to their rings.
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
     pub secret_key: SecretKey,
+    /// TCP port the daemon listens on for local IPC connections (default: 60001).
     #[serde(default = "Config::default_daemon_port")]
     pub daemon_port: u16,
 }

@@ -11,7 +11,7 @@ use crate::daemon::protocol::{EventKind, Op};
 use crate::daemon::server::DaemonServer;
 use iroh_rings::RedbRegistry;
 
-pub async fn run_start(data_dir: &Path) -> Result<()> {
+pub(crate) async fn run_start(data_dir: &Path) -> Result<()> {
     let client = super::daemon_client(data_dir)?;
 
     if client.is_running().await {
@@ -67,7 +67,7 @@ pub async fn run_start(data_dir: &Path) -> Result<()> {
     anyhow::bail!("Rdrop daemon did not become reachable within 3s — check logs")
 }
 
-pub async fn run_stop(data_dir: &Path) -> Result<()> {
+pub(crate) async fn run_stop(data_dir: &Path) -> Result<()> {
     let client = super::daemon_client(data_dir)?;
 
     if !client.is_running().await {
@@ -88,7 +88,7 @@ pub async fn run_stop(data_dir: &Path) -> Result<()> {
     anyhow::bail!("Rdrop daemon did not stop within 3s")
 }
 
-pub async fn run_status(data_dir: &Path) -> Result<()> {
+pub(crate) async fn run_status(data_dir: &Path) -> Result<()> {
     let client = super::daemon_client(data_dir)?;
 
     if !client.is_running().await {
@@ -103,7 +103,7 @@ pub async fn run_status(data_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn run_serve(data_dir: &Path) -> Result<()> {
+pub(crate) async fn run_serve(data_dir: &Path) -> Result<()> {
     let cfg = Config::load_or_create(data_dir).context("loading config")?;
     let port = cfg.daemon_port;
     let registry =

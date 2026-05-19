@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::daemon::protocol::Op;
 
-pub async fn run_tag(
+pub(crate) async fn run_tag(
     target: String,
     rings: Vec<String>,
     open: bool,
@@ -19,7 +19,7 @@ pub async fn run_tag(
         .await
 }
 
-pub async fn run_tags(target: String, data_dir: &Path) -> Result<()> {
+pub(crate) async fn run_tags(target: String, data_dir: &Path) -> Result<()> {
     super::daemon_client(data_dir)?
         .run(Op::Tags { target })
         .await
