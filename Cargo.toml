@@ -23,7 +23,7 @@ name = "rdrop"
 path = "src/main.rs"
 
 [dependencies]
-iroh-rings = { version = "0.2.0", features = ["redb", "fs"] }
+iroh-rings = { git = "https://github.com/rikettsie/iroh-rings", branch = "refactor/12-api-polish-after-typed-errors", features = ["redb", "fs", "mem"] }
 
 # Core components: transport protocol, chunking, concurrency
 iroh = "0.98.2"

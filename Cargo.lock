@@ -1948,8 +1948,7 @@ dependencies = [
 [[package]]
 name = "iroh-rings"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd2b121fa0a26b0678a9c5d0168fbf4c8a2582d4ad534f4fb14d44a8a150be5a"
+source = "git+https://github.com/rikettsie/iroh-rings?branch=refactor%2F12-api-polish-after-typed-errors#10b8580c6f1823bf10d742f38e8b204a421924bb"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -1962,6 +1961,7 @@ dependencies = [
  "redb 4.1.0",
  "serde",
  "serde_millis",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]

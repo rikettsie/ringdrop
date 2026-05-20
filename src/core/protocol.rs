@@ -113,9 +113,12 @@ impl RingReceiver {
         recv.read_exact(&mut status_byte)
             .await
             .context("reading status")?;
+        // Status is #[non_exhaustive]: the wildcard handles variants added in
+        // future protocol versions that this client doesn't yet understand.
         match Status::try_from(status_byte[0])? {
             Status::Denied => bail!("access denied — not in a ring for this blob"),
             Status::Allowed => {}
+            _ => bail!("unexpected status byte from sender"),
         }
 
         let mut size_buf = [0u8; BAO_SIZE_HEADER];
