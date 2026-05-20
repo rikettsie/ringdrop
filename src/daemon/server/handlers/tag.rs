@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::core::Node;
 use crate::daemon::protocol::Event;
 
-use super::{resolve_target, send};
+use super::{format_ring, resolve_target, send};
 
 pub(crate) async fn handle_tag<R: Registry + Clone + Send + Sync + 'static>(
     req_id: Uuid,
@@ -73,18 +73,7 @@ pub(crate) async fn handle_tags<R: Registry + Clone + Send + Sync + 'static>(
         )
         .await;
         for ring in &rings {
-            if ring.is_open() {
-                send(
-                    tx,
-                    Event::line(
-                        req_id,
-                        format!("  {}  (open — publicly accessible)", ring.as_str()),
-                    ),
-                )
-                .await;
-            } else {
-                send(tx, Event::line(req_id, format!("  {}", ring.as_str()))).await;
-            }
+            send(tx, Event::line(req_id, format_ring(ring))).await;
         }
     }
     send(tx, Event::done(req_id)).await;
