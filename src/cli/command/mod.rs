@@ -121,7 +121,15 @@ pub(super) enum BlobCmd {
     },
 
     /// List all local blobs with their ring tags and share ticket
-    List,
+    List {
+        /// Only show blobs accessible by this peer (base32 node ID)
+        #[arg(long)]
+        peer: Option<String>,
+
+        /// Only show blobs tagged with this ring (repeatable, OR semantics)
+        #[arg(long = "ring")]
+        rings: Option<Vec<String>>,
+    },
 }
 
 #[derive(Subcommand)]
