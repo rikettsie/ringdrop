@@ -1,6 +1,6 @@
 mod common;
 
-use iroh_rings::{Registry, OPEN_RING_NAME};
+use iroh_rings::{Permission, Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -86,7 +86,7 @@ async fn export_without_ticket_name_uses_hash_hex_not_download() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)
+        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME, &[Permission::Read])
         .unwrap();
 
     // Simulate what old `blob list` produced — ticket with no name.

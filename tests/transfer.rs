@@ -1,6 +1,6 @@
 mod common;
 
-use iroh_rings::{Registry, OPEN_RING_NAME};
+use iroh_rings::{Permission, Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -16,7 +16,7 @@ async fn file_content_matches_after_transfer() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)
+        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME, &[Permission::Read])
         .unwrap();
 
     let ticket = sender
@@ -49,7 +49,7 @@ async fn directory_contents_match_after_transfer() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)
+        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME, &[Permission::Read])
         .unwrap();
 
     let ticket = sender.node.make_ticket(hash, format, Some("mydir".into()));
@@ -83,7 +83,7 @@ async fn already_complete_blob_skips_transfer() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)
+        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME, &[Permission::Read])
         .unwrap();
 
     let ticket = sender

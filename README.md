@@ -10,7 +10,7 @@ To share a file, associate it with one or more rings and get back an `rdrop://` 
 Only peers who are members of those rings can download it.
 Transfers resume automatically if interrupted — no verified data is re-transferred after a crash or disconnect.
 
-Access control is enforced at the connection level via an ALPN protocol (`/iroh-rings/1`). When a peer requests a blob, the sender checks whether that peer's `peer-id` belongs to any ring the blob is associated with. If not, the transfer is denied before any data is sent.
+Access control is enforced at the connection level via an ALPN protocol (`/iroh-rings/2`). Ring–resource associations carry typed permissions (`Read`, `Write`, `Delete`). When a peer requests to download a blob, the sender checks that the peer holds `Read` permission on it — either through ring membership or the built-in open ring — and denies the transfer before any data is sent if not.
 
 ## Features
 

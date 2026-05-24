@@ -19,8 +19,9 @@ use iroh_blobs::{
 };
 use tracing::info;
 
-pub(crate) use iroh_rings::protocol::{encode_request, RingGate, Status, SC_ALPN};
+pub(crate) use iroh_rings::protocol::{encode_request, RingGate, Status};
 pub(crate) use iroh_rings::transfers::fs::encode_ranges_wire;
+pub(crate) use iroh_rings::{Permission, ALPN};
 
 // export_bao emits an 8-byte little-endian content size before the bao tree,
 // so the receiver knows the total before any leaf data arrives.
@@ -105,7 +106,8 @@ impl RingReceiver {
         let missing = ChunkRanges::all();
 
         let (mut send, mut recv) = conn.open_bi().await?;
-        send.write_all(&encode_request(hash.as_bytes())?).await?;
+        send.write_all(&encode_request(hash.as_bytes(), Permission::Read)?)
+            .await?;
         send.write_all(&encode_ranges_wire(&already_have)).await?;
         send.finish()?;
 
@@ -229,20 +231,20 @@ impl RingReceiver {
 mod tests {
     use iroh_blobs::Hash;
 
-    use super::encode_request;
-    use super::SC_ALPN;
+    use super::{encode_request, Permission, ALPN};
 
     #[test]
     fn request_encoding_is_length_prefixed() {
         let hash = Hash::from_bytes([0xab; 32]);
-        let encoded = encode_request(hash.as_bytes()).unwrap();
+        let encoded = encode_request(hash.as_bytes(), Permission::Read).unwrap();
         let len = u16::from_le_bytes(encoded[..2].try_into().unwrap());
         assert_eq!(len as usize, 32);
-        assert_eq!(&encoded[2..], hash.as_bytes());
+        // wire format: [u16 len][resource id][op byte]
+        assert_eq!(&encoded[2..2 + 32], hash.as_bytes());
     }
 
     #[test]
-    fn sc_alpn_is_iroh_rings_v1() {
-        assert_eq!(SC_ALPN, b"/iroh-rings/1");
+    fn alpn_is_iroh_rings_v2() {
+        assert_eq!(ALPN, b"/iroh-rings/2");
     }
 }

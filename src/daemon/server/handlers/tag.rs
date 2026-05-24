@@ -1,5 +1,5 @@
 use anyhow::Result;
-use iroh_rings::{Registry, OPEN_RING_NAME};
+use iroh_rings::{Permission, Registry, OPEN_RING_NAME};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -26,7 +26,8 @@ pub(crate) async fn handle_tag<R: Registry + Clone + Send + Sync + 'static>(
 
     let hash = resolve_target(node, &target).await?;
     for ring in &rings {
-        node.registry.add_ring_to_resource(*hash.as_bytes(), ring)?;
+        node.registry
+            .add_ring_to_resource(*hash.as_bytes(), ring, &[Permission::Read])?;
         send(
             tx,
             Event::line(req_id, format!("Tagged {hash} with ring '{ring}'")),
@@ -34,8 +35,11 @@ pub(crate) async fn handle_tag<R: Registry + Clone + Send + Sync + 'static>(
         .await;
     }
     if open {
-        node.registry
-            .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)?;
+        node.registry.add_ring_to_resource(
+            *hash.as_bytes(),
+            OPEN_RING_NAME,
+            &[Permission::Read],
+        )?;
         send(
             tx,
             Event::line(
@@ -72,7 +76,7 @@ pub(crate) async fn handle_tags<R: Registry + Clone + Send + Sync + 'static>(
             Event::line(req_id, format!("{}: {} rings:", hash, rings.len())),
         )
         .await;
-        for ring in &rings {
+        for (ring, _) in &rings {
             send(tx, Event::line(req_id, format_ring(ring))).await;
         }
     }
