@@ -1948,7 +1948,7 @@ dependencies = [
 [[package]]
 name = "iroh-rings"
 version = "0.4.0"
-source = "git+https://github.com/rikettsie/iroh-rings.git?branch=feat%2Fr-w-d-rebac-permission-model#a4362099edf4a5c2199524ebd3d51b5dd509a8e1"
+source = "git+https://github.com/rikettsie/iroh-rings.git?branch=feat%2Fr-w-d-rebac-permission-model#7c066ed3c1677ad6df5569049559bba5b7417d42"
 dependencies = [
  "anyhow",
  "bao-tree",
