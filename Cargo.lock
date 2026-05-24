@@ -1947,9 +1947,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-rings"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b64b964368edeb1fea63ddb8741cce1b7c1f8f216af9e36ebdb0227cea6199c"
+version = "0.4.0"
+source = "git+https://github.com/rikettsie/iroh-rings.git?branch=feat%2Fr-w-d-rebac-permission-model#b3065dda79d3c0946fb7621a308ad98e791b4eec"
 dependencies = [
  "anyhow",
  "bao-tree",

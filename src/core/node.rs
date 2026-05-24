@@ -3,8 +3,8 @@
 //! Wraps:
 //!  - an iroh `Endpoint`        — QUIC, NAT traversal, relay fallback
 //!  - an iroh-blobs `FsStore`   — BLAKE3 chunking, outboard, bitfield tracking
-//!  - a `RingGate`              — custom ALPN with per-blob access control
-//!  - a `Registry`              — ring membership and file tagging
+//!  - a `RingGate`              — custom ALPN with permission-typed access control
+//!  - a `Registry`              — ring membership and permission-typed resource associations
 
 use std::{
     collections::HashSet,
@@ -25,10 +25,11 @@ use iroh_blobs::{
 use tracing::info;
 use walkdir::WalkDir;
 
-use super::protocol::{RingGate, RingReceiver, SC_ALPN};
+use super::protocol::{RingGate, RingReceiver, ALPN};
 use super::ticket::ShareTicket;
 use crate::config::Config;
 use iroh_rings::FsTransfer;
+use iroh_rings::Permission;
 use iroh_rings::Registry;
 use iroh_rings::OPEN_RING_NAME;
 
@@ -48,7 +49,7 @@ pub struct Node<R> {
     pub endpoint: Endpoint,
     /// The iroh-blobs persistent store — holds all locally imported and received blobs.
     pub store: FsStore,
-    /// The ring registry — tracks ring membership and per-blob access tags.
+    /// The ring registry — tracks ring membership and permission-typed resource associations.
     pub registry: R,
     router: Router,
 }
@@ -124,9 +125,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
             FsTransfer::new(store.clone(), registry.clone()),
         );
 
-        let router = Router::builder(endpoint.clone())
-            .accept(SC_ALPN, gate)
-            .spawn();
+        let router = Router::builder(endpoint.clone()).accept(ALPN, gate).spawn();
 
         endpoint.online().await;
         info!(peer_id = %endpoint.id(), "node online");
@@ -243,7 +242,8 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
     /// List blobs in the local store as `(hash, format, tag_name)` triples.
     ///
     /// When `peer` is supplied only blobs accessible to that peer are returned
-    /// (i.e. the blob is tagged with at least one ring the peer belongs to).
+    /// (i.e. blobs associated with at least one ring that both includes the peer
+    /// and grants [`Permission::Read`]).
     /// When `rings` is supplied only blobs tagged with at least one of those
     /// ring names are returned (OR semantics).  When both are given the
     /// filters are combined: a blob must satisfy both independently.
@@ -278,12 +278,14 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
             for (hash, format, name) in blobs {
                 let blob_rings = self.registry.list_resource_rings(*hash.as_bytes())?;
                 if let Some(ref rset) = ring_names {
-                    if !blob_rings.iter().any(|r| rset.contains(r.as_str())) {
+                    if !blob_rings.iter().any(|(r, _)| rset.contains(r.as_str())) {
                         continue;
                     }
                 }
                 if let Some(ref pset) = peer_rings {
-                    if !blob_rings.iter().any(|r| pset.contains(r.as_str())) {
+                    if !blob_rings.iter().any(|(r, perms)| {
+                        pset.contains(r.as_str()) && perms.contains(&Permission::Read)
+                    }) {
                         continue;
                     }
                 }
@@ -433,7 +435,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
 
         let conn = self
             .endpoint
-            .connect(ticket.node_addr().clone(), SC_ALPN)
+            .connect(ticket.node_addr().clone(), ALPN)
             .await
             .context("connecting to sender")?;
 

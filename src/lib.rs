@@ -26,7 +26,7 @@
 //! │  │  │    └───────┬──────┘       │  │  │
 //! │  │  │            ↕              │  │  │
 //! │  │  │         RingGate          │  │  │
-//! │  │  │   (ALPN /iroh-rings/1)    │  │  │
+//! │  │  │   (ALPN /iroh-rings/2)    │  │  │
 //! │  │  │            ↕              │  │  │
 //! │  │  │        Endpoint           │  │  │
 //! │  │  │       (QUIC/iroh)         │  │  │
@@ -38,9 +38,12 @@
 //! ```
 //!
 //! A [`core::Node`] wraps an iroh QUIC endpoint, an iroh-blobs persistent blob
-//! store, a `Registry` that tracks ring membership, and a `RingGate` that
-//! enforces access control: a blob is only served to a peer whose
-//! [`EndpointId`] is a member of at least one ring the blob is tagged with.
+//! store, a `Registry` that tracks ring membership and permission-typed
+//! resource associations, and a `RingGate` that enforces access control: a
+//! blob is only served to a peer that holds [`Permission::Read`] on it — either
+//! through ring membership or the built-in open ring.
+//!
+//! [`Permission::Read`]: iroh_rings::Permission
 //!
 //! The [`daemon`] module runs a `Node` as a background TCP server so that the
 //! CLI can talk to it over a local IPC connection.

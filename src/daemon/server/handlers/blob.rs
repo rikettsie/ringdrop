@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use iroh_rings::{Registry, OPEN_RING_NAME};
+use iroh_rings::{Permission, Registry, OPEN_RING_NAME};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -50,13 +50,14 @@ pub(crate) async fn handle_import<R: Registry + Clone + Send + Sync + 'static>(
             .await;
         } else {
             send(tx, Event::line(req_id, "Already tagged:")).await;
-            for r in &existing {
+            for (r, _) in &existing {
                 send(tx, Event::line(req_id, format_ring(r))).await;
             }
         }
     } else {
         for ring in &effective_rings {
-            node.registry.add_ring_to_resource(*hash.as_bytes(), ring)?;
+            node.registry
+                .add_ring_to_resource(*hash.as_bytes(), ring, &[Permission::Read])?;
             if ring == OPEN_RING_NAME {
                 send(
                     tx,
@@ -122,7 +123,7 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
                 )
                 .await;
             } else {
-                let names: Vec<_> = rings.iter().map(|r| r.as_str().to_owned()).collect();
+                let names: Vec<_> = rings.iter().map(|(r, _)| r.as_str().to_owned()).collect();
                 send(
                     tx,
                     Event::line(req_id, format!("    rings:  {}", names.join(", "))),

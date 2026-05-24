@@ -23,7 +23,7 @@ name = "rdrop"
 path = "src/main.rs"
 
 [dependencies]
-iroh-rings = { version = "0.3.0", features = ["redb", "fs", "mem"] }
+iroh-rings = { git = "https://github.com/rikettsie/iroh-rings.git", branch = "feat/r-w-d-rebac-permission-model", features = ["redb", "fs", "mem"] }
 
 # Core components: transport protocol, chunking, concurrency
 iroh = "0.98.2"

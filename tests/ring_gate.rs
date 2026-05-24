@@ -1,6 +1,6 @@
 mod common;
 
-use iroh_rings::{Registry, OPEN_RING_NAME};
+use iroh_rings::{Permission, Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -15,7 +15,7 @@ async fn open_ring_allows_any_peer() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME)
+        .add_ring_to_resource(*hash.as_bytes(), OPEN_RING_NAME, &[Permission::Read])
         .unwrap();
 
     let ticket = sender
@@ -51,7 +51,7 @@ async fn private_ring_allows_member() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), "friends")
+        .add_ring_to_resource(*hash.as_bytes(), "friends", &[Permission::Read])
         .unwrap();
 
     let ticket = sender
@@ -83,7 +83,7 @@ async fn private_ring_denies_non_member() {
     sender
         .node
         .registry
-        .add_ring_to_resource(*hash.as_bytes(), "vip")
+        .add_ring_to_resource(*hash.as_bytes(), "vip", &[Permission::Read])
         .unwrap();
 
     let ticket = sender.node.make_ticket(hash, format, None);
