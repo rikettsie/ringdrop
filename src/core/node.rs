@@ -25,6 +25,10 @@ use iroh_blobs::{
 use tracing::info;
 use walkdir::WalkDir;
 
+use super::grants::GrantStore;
+use super::protocol::catalog::{
+    decode_entries, CatalogEntry, CatalogHandler, ALLOWED, BLOB_LIST, CATALOG_ALPN,
+};
 use super::protocol::{RingGate, RingReceiver, ALPN};
 use super::ticket::ShareTicket;
 use crate::config::Config;
@@ -51,6 +55,8 @@ pub struct Node<R> {
     pub store: FsStore,
     /// The ring registry — tracks ring membership and permission-typed resource associations.
     pub registry: R,
+    /// The grant store — controls which peers may invoke catalog operations.
+    pub grants: GrantStore,
     router: Router,
 }
 
@@ -120,12 +126,24 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
             .await
             .context("loading FsStore")?;
 
+        let grants =
+            GrantStore::open(data_dir.join("grants.redb")).context("opening grants database")?;
+
         let gate = RingGate::new(
             registry.clone(),
             FsTransfer::new(store.clone(), registry.clone()),
         );
+        let catalog = CatalogHandler::new(
+            store.clone(),
+            registry.clone(),
+            grants.clone(),
+            endpoint.clone(),
+        );
 
-        let router = Router::builder(endpoint.clone()).accept(ALPN, gate).spawn();
+        let router = Router::builder(endpoint.clone())
+            .accept(ALPN, gate)
+            .accept(CATALOG_ALPN, catalog)
+            .spawn();
 
         endpoint.online().await;
         info!(peer_id = %endpoint.id(), "node online");
@@ -134,6 +152,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
             endpoint,
             store,
             registry,
+            grants,
             router,
         })
     }
@@ -351,6 +370,39 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         }
     }
 
+    /// Connect to a remote node and fetch its catalog — the list of blobs the
+    /// caller is allowed to download.
+    ///
+    /// The remote node must have granted [`crate::core::grants::Privilege::BlobList`] to
+    /// this node's identity. Only blobs that the calling peer has
+    /// [`iroh_rings::Permission::Read`] on (via ring membership) will be included.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection fails, the remote node denies access,
+    /// or the response stream is malformed.
+    pub async fn catalog_connect(&self, peer_addr: EndpointAddr) -> Result<Vec<CatalogEntry>> {
+        let conn = self
+            .endpoint
+            .connect(peer_addr, CATALOG_ALPN)
+            .await
+            .context("connecting for catalog")?;
+        let (mut send, mut recv) = conn.open_bi().await.context("opening catalog stream")?;
+        send.write_all(&[BLOB_LIST])
+            .await
+            .context("sending catalog command")?;
+        send.finish()?;
+
+        let mut status = [0u8; 1];
+        recv.read_exact(&mut status)
+            .await
+            .context("reading catalog status")?;
+        if status[0] != ALLOWED {
+            anyhow::bail!("catalog access denied by remote node");
+        }
+        decode_entries(&mut recv).await
+    }
+
     /// Import a file or directory, dispatching to [`Node::import_file`] or
     /// [`Node::import_directory`] based on whether `path` is a file or a dir.
     ///
@@ -469,9 +521,24 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
 #[cfg(test)]
 mod tests {
     use iroh::SecretKey;
-    use iroh_rings::{InMemoryRegistry, OPEN_RING_NAME};
+    use iroh_rings::{InMemoryRegistry, Permission, OPEN_RING_NAME};
+    use tempfile::TempDir;
 
     use super::*;
+    use crate::config::Config;
+    use crate::core::grants::Privilege;
+
+    async fn start_test_node() -> (Node<InMemoryRegistry>, TempDir) {
+        let dir = TempDir::new().unwrap();
+        let cfg = Config {
+            secret_key: SecretKey::generate(),
+            daemon_port: 60001,
+        };
+        let node = Node::start(dir.path(), cfg, InMemoryRegistry::default())
+            .await
+            .unwrap();
+        (node, dir)
+    }
 
     fn make_registry() -> InMemoryRegistry {
         InMemoryRegistry::default()
@@ -510,5 +577,43 @@ mod tests {
     fn peer_ring_set_rejects_invalid_peer_string() {
         let reg = make_registry();
         assert!(peer_ring_set(&reg, "not-a-valid-peer-id").is_err());
+    }
+
+    #[tokio::test]
+    async fn catalog_connect_denied_when_no_grant() {
+        let (remote, _dir1) = start_test_node().await;
+        let (local, _dir2) = start_test_node().await;
+
+        let result = local.catalog_connect(remote.endpoint.addr()).await;
+        assert!(result.is_err(), "expected denial error");
+    }
+
+    #[tokio::test]
+    async fn catalog_connect_returns_entries_with_grant_and_ring_access() {
+        let (remote, remote_dir) = start_test_node().await;
+        let (local, _dir2) = start_test_node().await;
+        let local_id = local.endpoint.id();
+
+        let file_path = remote_dir.path().join("catalog_test.txt");
+        tokio::fs::write(&file_path, b"catalog entry content")
+            .await
+            .unwrap();
+        let (hash, _) = remote.import_file(&file_path).await.unwrap();
+
+        remote.registry.create_ring("access").unwrap();
+        remote
+            .registry
+            .add_peer_to_ring("access", local_id, None)
+            .unwrap();
+        remote
+            .registry
+            .add_ring_to_resource(*hash.as_bytes(), "access", &[Permission::Read])
+            .unwrap();
+        remote.grants.grant(Privilege::BlobList, local_id).unwrap();
+
+        let entries = local.catalog_connect(remote.endpoint.addr()).await.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].hash, hash);
+        assert_eq!(entries[0].name, "catalog_test.txt");
     }
 }
