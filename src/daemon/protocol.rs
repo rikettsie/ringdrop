@@ -442,4 +442,38 @@ mod tests {
         .unwrap();
         assert_eq!(json, r#"{"op":"remote_blob_list","peer":"abc123"}"#);
     }
+
+    #[test]
+    fn op_grants_without_filters_deserializes_correctly() {
+        let op: Op = serde_json::from_str(r#"{"op":"grants"}"#).unwrap();
+        assert_eq!(
+            op,
+            Op::Grants {
+                peer: None,
+                privilege: None
+            }
+        );
+    }
+
+    #[test]
+    fn op_grants_with_peer_filter_deserializes_correctly() {
+        let op: Op = serde_json::from_str(r#"{"op":"grants","peer":"abc123"}"#).unwrap();
+        assert_eq!(
+            op,
+            Op::Grants {
+                peer: Some("abc123".into()),
+                privilege: None
+            }
+        );
+    }
+
+    #[test]
+    fn op_grants_with_both_filters_round_trips() {
+        let original = Op::Grants {
+            peer: Some("abc123".into()),
+            privilege: Some("blob-list".into()),
+        };
+        let parsed: Op = serde_json::from_str(&serde_json::to_string(&original).unwrap()).unwrap();
+        assert_eq!(parsed, original);
+    }
 }

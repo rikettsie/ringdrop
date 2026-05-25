@@ -445,6 +445,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unknown_command_byte_receives_denied_status() {
+        let server = TestServer::start().await;
+        let client = client_endpoint().await;
+        server
+            .grants
+            .grant(Privilege::BlobList, client.id())
+            .unwrap();
+
+        let conn = client
+            .connect(server.endpoint.addr(), CATALOG_ALPN)
+            .await
+            .unwrap();
+        let (mut send, mut recv) = conn.open_bi().await.unwrap();
+        send.write_all(&[0xFF]).await.unwrap();
+        send.finish().unwrap();
+
+        let mut status = [0u8; 1];
+        recv.read_exact(&mut status).await.unwrap();
+        assert_eq!(status[0], DENIED, "unknown command should be denied");
+    }
+
+    #[tokio::test]
     async fn entry_contains_hash_name_and_valid_ticket() {
         let server = TestServer::start().await;
         let client = client_endpoint().await;

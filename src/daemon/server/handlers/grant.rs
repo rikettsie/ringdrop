@@ -183,4 +183,34 @@ mod tests {
         let (_, s) = peer_str();
         assert!(grant_lines(&gs, &s, "superuser").is_err());
     }
+
+    #[test]
+    fn grants_lines_filters_by_privilege() {
+        let (gs, _dir) = open_grants();
+        let (id, _) = peer_str();
+        gs.grant(Privilege::BlobList, id).unwrap();
+        let lines = grants_lines(&gs, None, Some("blob-list")).unwrap();
+        assert_eq!(lines.len(), 2, "header + one entry");
+        assert!(lines[1].contains("blob-list"));
+        assert!(lines[1].contains(&id.to_string()));
+    }
+
+    #[test]
+    fn grants_lines_and_filter_requires_both_conditions_to_match() {
+        let (gs, _dir) = open_grants();
+        let (id1, s1) = peer_str();
+        let (id2, s2) = peer_str();
+        gs.grant(Privilege::BlobList, id1).unwrap();
+        gs.grant(Privilege::BlobList, id2).unwrap();
+        // peer1 + blob-list: matches exactly one entry
+        let lines = grants_lines(&gs, Some(&s1), Some("blob-list")).unwrap();
+        assert_eq!(lines.len(), 2, "header + one entry");
+        assert!(lines[1].contains(&id1.to_string()));
+        assert!(!lines[1].contains(&id2.to_string()));
+        // peer2 + blob-list: matches the other entry only
+        let lines = grants_lines(&gs, Some(&s2), Some("blob-list")).unwrap();
+        assert_eq!(lines.len(), 2, "header + one entry");
+        assert!(lines[1].contains(&id2.to_string()));
+        assert!(!lines[1].contains(&id1.to_string()));
+    }
 }

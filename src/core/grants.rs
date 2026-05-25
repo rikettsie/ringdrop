@@ -293,4 +293,16 @@ mod tests {
     fn unknown_privilege_string_errors() {
         assert!(Privilege::try_from("admin").is_err());
     }
+
+    #[test]
+    fn grants_persist_across_close_and_reopen() {
+        let dir = tempdir().unwrap();
+        let peer = peer();
+        {
+            let store = GrantStore::open(dir.path().join("grants.redb")).unwrap();
+            store.grant(Privilege::BlobList, peer).unwrap();
+        }
+        let store = GrantStore::open(dir.path().join("grants.redb")).unwrap();
+        assert!(store.has_grant(Privilege::BlobList, &peer).unwrap());
+    }
 }
