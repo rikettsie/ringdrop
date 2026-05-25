@@ -386,7 +386,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
             .endpoint
             .connect(peer_addr, CATALOG_ALPN)
             .await
-            .context("connecting for catalog")?;
+            .map_err(|e| anyhow::anyhow!("connecting for catalog: {e}"))?;
         let (mut send, mut recv) = conn.open_bi().await.context("opening catalog stream")?;
         send.write_all(&[BLOB_LIST])
             .await
