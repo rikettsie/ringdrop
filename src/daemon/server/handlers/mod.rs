@@ -1,5 +1,7 @@
 pub(super) mod blob;
+pub(super) mod grant;
 pub(super) mod receive;
+pub(super) mod remote;
 pub(super) mod ring;
 pub(super) mod tag;
 

@@ -35,6 +35,14 @@
 //!
 //! # Receive — resumes automatically if interrupted
 //! rdrop receive rdrop://ABCDEF... [--dest ./downloads]
+//!
+//! # Manage catalog access grants
+//! rdrop grant add <peer-id> <privilege>           # e.g. blob-list
+//! rdrop grant remove <peer-id> <privilege>
+//! rdrop grant list [--peer <peer-id>] [--privilege <privilege>]
+//!
+//! # Query remote nodes
+//! rdrop remote blob-list <peer-id>                # list blobs accessible to you on a remote node
 //! ```
 
 mod command;
@@ -116,6 +124,8 @@ pub async fn run() -> Result<()> {
             command::tag::run_tag(target, rings, open, &data_dir).await?;
         }
         Cmd::Tags { target } => command::tag::run_tags(target, &data_dir).await?,
+        Cmd::Grant(cmd) => command::grant::run(cmd, &data_dir).await?,
+        Cmd::Remote(cmd) => command::remote::run(cmd, &data_dir).await?,
         Cmd::Id => command::id::run(&data_dir).await?,
     }
 

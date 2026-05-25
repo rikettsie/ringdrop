@@ -111,6 +111,62 @@ pub enum Op {
         /// Overwrite an existing destination without prompting.
         force_overwrite: bool,
     },
+    /// Grant `privilege` to `peer`.
+    ///
+    /// `peer` is a base32-encoded [`EndpointId`]; `privilege` is the canonical
+    /// privilege name (e.g. `"blob-list"`).
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
+    Grant {
+        /// Base32 [`EndpointId`] string of the peer to grant access to.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+        /// Privilege to grant (e.g. `"blob-list"`).
+        privilege: String,
+    },
+    /// Revoke `privilege` from `peer`.
+    ///
+    /// `peer` is a base32-encoded [`EndpointId`]; `privilege` is the canonical
+    /// privilege name (e.g. `"blob-list"`).
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
+    Revoke {
+        /// Base32 [`EndpointId`] string of the peer to revoke access from.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+        /// Privilege to revoke (e.g. `"blob-list"`).
+        privilege: String,
+    },
+    /// List current grants as `privilege peer_id` pairs, one per [`EventKind::Line`].
+    ///
+    /// Both filters are optional; omitting them returns all grants.
+    Grants {
+        /// Only show grants for this base32 [`EndpointId`].
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        peer: Option<String>,
+        /// Only show grants for this privilege name (e.g. `"blob-list"`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        privilege: Option<String>,
+    },
+    /// Fetch the blob catalog from a remote node.
+    ///
+    /// The remote node must have granted `BlobList` privilege to the local
+    /// node's identity. Entries visible via ring membership are streamed back
+    /// as [`EventKind::Line`] events, one per blob.
+    ///
+    /// `peer` is a base32-encoded [`EndpointId`].
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
+    RemoteBlobList {
+        /// Base32 [`EndpointId`] string of the remote node to query.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+    },
     /// Gracefully stop the daemon after draining in-flight requests.
     Shutdown,
 }
@@ -325,5 +381,65 @@ mod tests {
         let parsed: Event =
             serde_json::from_str(&serde_json::to_string(&original).unwrap()).unwrap();
         assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn op_grant_serializes_correctly() {
+        let json = serde_json::to_string(&Op::Grant {
+            peer: "abc123".into(),
+            privilege: "blob-list".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"grant","peer":"abc123","privilege":"blob-list"}"#
+        );
+    }
+
+    #[test]
+    fn op_revoke_serializes_correctly() {
+        let json = serde_json::to_string(&Op::Revoke {
+            peer: "abc123".into(),
+            privilege: "blob-list".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"revoke","peer":"abc123","privilege":"blob-list"}"#
+        );
+    }
+
+    #[test]
+    fn op_grants_without_filters_serializes_to_op_only() {
+        assert_eq!(
+            serde_json::to_string(&Op::Grants {
+                peer: None,
+                privilege: None,
+            })
+            .unwrap(),
+            r#"{"op":"grants"}"#
+        );
+    }
+
+    #[test]
+    fn op_grants_with_filters_serializes_optional_fields() {
+        let json = serde_json::to_string(&Op::Grants {
+            peer: Some("abc123".into()),
+            privilege: Some("blob-list".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"grants","peer":"abc123","privilege":"blob-list"}"#
+        );
+    }
+
+    #[test]
+    fn op_remote_blob_list_serializes_correctly() {
+        let json = serde_json::to_string(&Op::RemoteBlobList {
+            peer: "abc123".into(),
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"op":"remote_blob_list","peer":"abc123"}"#);
     }
 }

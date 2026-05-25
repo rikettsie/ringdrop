@@ -288,6 +288,18 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
             handlers::receive::handle_receive(req_id, node, tx, ticket, dest, force_overwrite)
                 .await?;
         }
+        Op::Grant { peer, privilege } => {
+            handlers::grant::handle_grant(req_id, node, tx, peer, privilege).await?;
+        }
+        Op::Revoke { peer, privilege } => {
+            handlers::grant::handle_revoke(req_id, node, tx, peer, privilege).await?;
+        }
+        Op::Grants { peer, privilege } => {
+            handlers::grant::handle_grants(req_id, node, tx, peer, privilege).await?;
+        }
+        Op::RemoteBlobList { peer } => {
+            handlers::remote::handle_remote_blob_list(req_id, node, tx, peer).await?;
+        }
         Op::Shutdown => unreachable!("handled before handle_op"),
     }
     Ok(())
