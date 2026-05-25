@@ -78,8 +78,10 @@ pub(crate) async fn handle_import<R: Registry + Clone + Send + Sync + 'static>(
     let ticket = node.make_ticket(hash, format, display_name);
     let ticket_str = ticket.to_uri()?;
 
-    send(tx, Event::line(req_id, "\nTicket:")).await;
-    send(tx, Event::line(req_id, format!("  {ticket_str}\n"))).await;
+    send(tx, Event::blank(req_id)).await;
+    send(tx, Event::line(req_id, "Ticket:")).await;
+    send(tx, Event::line(req_id, format!("  {ticket_str}"))).await;
+    send(tx, Event::blank(req_id)).await;
     send(tx, Event::line(req_id, "Peers receive with:")).await;
     send(
         tx,
@@ -97,13 +99,12 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
     peer: Option<String>,
     rings: Option<Vec<String>>,
 ) -> Result<()> {
-    let blobs = node.list_blobs(peer.clone(), rings).await?;
+    let blobs = node.list_blobs(peer.as_deref(), rings).await?;
     if blobs.is_empty() {
-        let peer_str = if let Some(peer) = peer {
-            format!(" accessible by peer {}", peer)
-        } else {
-            String::from("")
-        };
+        let peer_str = peer
+            .as_deref()
+            .map(|p| format!(" accessible by peer {p}"))
+            .unwrap_or_default();
         send(
             tx,
             Event::line(req_id, format!("No blobs in local store{}.", peer_str)),
@@ -115,7 +116,8 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
             let rings = node.registry.list_resource_rings(*hash.as_bytes())?;
             let ticket = node.make_ticket(hash, format, Some(name.clone()));
             let ticket_str = ticket.to_uri()?;
-            send(tx, Event::line(req_id, format!("\n  {hash}  ({name})"))).await;
+            send(tx, Event::blank(req_id)).await;
+            send(tx, Event::line(req_id, format!("  {hash}  ({name})"))).await;
             if rings.is_empty() {
                 send(
                     tx,

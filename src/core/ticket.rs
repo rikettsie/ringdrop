@@ -48,6 +48,21 @@ impl ShareTicket {
         }
     }
 
+    /// Create a ticket with an explicit `format`.
+    pub fn from_format(
+        addr: EndpointAddr,
+        hash: Hash,
+        format: BlobFormat,
+        name: Option<String>,
+    ) -> Self {
+        ShareTicket {
+            addr,
+            hash,
+            format,
+            name,
+        }
+    }
+
     /// Returns the BLAKE3 root hash of the blob or collection.
     pub fn hash(&self) -> Hash {
         self.hash

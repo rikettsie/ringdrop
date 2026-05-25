@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use iroh::EndpointId;
+use iroh::{EndpointAddr, EndpointId};
 use iroh_blobs::Hash;
 
 /// Returns `~/.ringdrop`, falling back to `.ringdrop` in the current directory
@@ -24,6 +24,19 @@ pub fn default_data_dir() -> PathBuf {
 pub fn parse_peer_id(s: &str) -> Result<EndpointId> {
     s.parse()
         .map_err(|e| anyhow::anyhow!("invalid peer id: {e}"))
+}
+
+/// Strip direct IP addresses from an endpoint address, keeping only relay URLs and the node ID.
+///
+/// Tickets and catalog entries use relay-only addresses so they remain valid
+/// across daemon restarts and IP changes. iroh still negotiates a direct
+/// connection via hole-punching during the relay handshake when both peers
+/// are on the same LAN.
+pub(crate) fn relay_only_addr(full: EndpointAddr) -> EndpointAddr {
+    full.relay_urls()
+        .fold(EndpointAddr::new(full.id), |a, url| {
+            a.with_relay_url(url.clone())
+        })
 }
 
 /// Parse a BLAKE3 [`Hash`] from its hex string representation.

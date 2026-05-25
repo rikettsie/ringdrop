@@ -86,9 +86,29 @@ Associate a file with one or more rings:
 
 ```sh
 rdrop tag <file-name> --ring <ring-name>   # restrict to a ring
-rdrop tag <file-name> --open               # anyone with the ticket
+rdrop tag <file-name> --open   # anyone with the ticket
 rdrop tag <hash>   --ring <ring-name>   # same, by BLAKE3 hash
 rdrop tag <hash>   --open
+```
+
+### Manage catalog grants
+
+Control which peers can query your local blob list (i.e. run `rdrop remote blob-list` against your node):
+
+```sh
+rdrop grant add <peer-id> <privilege>   # grant a privilege (e.g. blob-list)
+rdrop grant remove <peer-id> <privilege>   # revoke it
+rdrop grant list [--peer <peer-id>] [--privilege <privilege>]   # list all grants (eventually filtered by peer and/or privilege)
+```
+
+The only privilege currently defined is `blob-list`, which lets a peer enumerate the blobs visible to them on your node (they only see what they already have access to download via ring-membership {Read} permission).
+
+### Query remote nodes
+
+List the blobs accessible to you on another node (the remote must have granted you the `blob-list` privilege):
+
+```sh
+rdrop remote blob-list <peer-id>
 ```
 
 ### Start the daemon

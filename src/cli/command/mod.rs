@@ -13,8 +13,10 @@ pub(crate) fn daemon_client(data_dir: &Path) -> Result<DaemonClient> {
 
 pub(super) mod blob;
 pub(super) mod daemon;
+pub(super) mod grant;
 pub(super) mod id;
 pub(super) mod receive;
+pub(super) mod remote;
 pub(super) mod ring;
 pub(super) mod tag;
 
@@ -81,6 +83,14 @@ pub(super) enum Cmd {
         target: String,
     },
 
+    /// Manage catalog access grants (control who can query your blob list)
+    #[command(subcommand)]
+    Grant(GrantCmd),
+
+    /// Query remote nodes
+    #[command(subcommand)]
+    Remote(RemoteCmd),
+
     /// Print your peer-id (i.e. this node public-id) so others can add you to their rings
     Id,
 }
@@ -129,6 +139,47 @@ pub(super) enum BlobCmd {
         /// Only show blobs tagged with this ring (repeatable, OR semantics)
         #[arg(long = "ring")]
         rings: Option<Vec<String>>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(super) enum GrantCmd {
+    /// Grant a privilege to a peer (e.g. `blob-list`)
+    Add {
+        /// Base32 peer-id of the peer to grant access to
+        #[arg(value_name = "PEER-ID")]
+        peer: String,
+        /// Privilege to grant (e.g. `blob-list`)
+        #[arg(value_name = "PRIVILEGE")]
+        privilege: String,
+    },
+    /// Revoke a privilege from a peer
+    Remove {
+        /// Base32 peer-id of the peer to revoke access from
+        #[arg(value_name = "PEER-ID")]
+        peer: String,
+        /// Privilege to revoke (e.g. `blob-list`)
+        #[arg(value_name = "PRIVILEGE")]
+        privilege: String,
+    },
+    /// List grants, optionally filtered (filters compound in AND)
+    List {
+        /// Only show grants for this peer
+        #[arg(long, value_name = "PEER-ID")]
+        peer: Option<String>,
+        /// Only show grants for this privilege
+        #[arg(long, value_name = "PRIVILEGE")]
+        privilege: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(super) enum RemoteCmd {
+    /// List blobs accessible to you on a remote node
+    BlobList {
+        /// Base32 peer-id of the remote node to query
+        #[arg(value_name = "PEER-ID")]
+        peer: String,
     },
 }
 

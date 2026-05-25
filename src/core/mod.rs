@@ -9,9 +9,12 @@
 //! [`Endpoint`]: iroh::Endpoint
 //! [`FsStore`]: iroh_blobs::store::fs::FsStore
 
+pub mod grants;
 mod node;
 mod protocol;
 mod ticket;
 
+pub use grants::{GrantStore, Privilege};
 pub use node::Node;
+pub use protocol::catalog::CatalogEntry;
 pub use ticket::ShareTicket;

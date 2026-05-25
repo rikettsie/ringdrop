@@ -19,9 +19,7 @@ use iroh_blobs::{
 };
 use tracing::info;
 
-pub(crate) use iroh_rings::protocol::{encode_request, RingGate, Status};
-pub(crate) use iroh_rings::transfers::fs::encode_ranges_wire;
-pub(crate) use iroh_rings::{Permission, ALPN};
+use super::{encode_ranges_wire, encode_request, Permission, Status};
 
 // export_bao emits an 8-byte little-endian content size before the bao tree,
 // so the receiver knows the total before any leaf data arrives.
@@ -231,7 +229,9 @@ impl RingReceiver {
 mod tests {
     use iroh_blobs::Hash;
 
-    use super::{encode_request, Permission, ALPN};
+    use iroh_rings::ALPN;
+
+    use super::{encode_request, Permission};
 
     #[test]
     fn request_encoding_is_length_prefixed() {

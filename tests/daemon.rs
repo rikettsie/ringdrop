@@ -125,3 +125,121 @@ async fn oversized_request_is_rejected_with_error() {
     );
     daemon.shutdown().await;
 }
+
+#[tokio::test]
+async fn grants_list_on_empty_store_returns_empty_message() {
+    let daemon = common::TestDaemon::start().await;
+    let mut lines: Vec<String> = Vec::new();
+    daemon
+        .client
+        .send(
+            Op::Grants {
+                peer: None,
+                privilege: None,
+            },
+            |event| {
+                if let EventKind::Line { text } = event.kind {
+                    lines.push(text);
+                }
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(lines, vec!["No grants."]);
+    daemon.shutdown().await;
+}
+
+#[tokio::test]
+async fn grant_add_then_list_shows_the_grant() {
+    let daemon = common::TestDaemon::start().await;
+    let mut peer_id = String::new();
+    daemon
+        .client
+        .send(Op::NodeId, |event| {
+            if let EventKind::Line { text } = event.kind {
+                peer_id = text;
+            }
+        })
+        .await
+        .unwrap();
+
+    daemon
+        .client
+        .run(Op::Grant {
+            peer: peer_id.clone(),
+            privilege: "blob-list".into(),
+        })
+        .await
+        .unwrap();
+
+    let mut lines: Vec<String> = Vec::new();
+    daemon
+        .client
+        .send(
+            Op::Grants {
+                peer: None,
+                privilege: None,
+            },
+            |event| {
+                if let EventKind::Line { text } = event.kind {
+                    lines.push(text);
+                }
+            },
+        )
+        .await
+        .unwrap();
+    assert!(lines[0].contains("1 grants:"), "got: {:?}", lines);
+    assert!(lines[1].contains(&peer_id));
+    daemon.shutdown().await;
+}
+
+#[tokio::test]
+async fn grant_revoke_removes_grant_from_list() {
+    let daemon = common::TestDaemon::start().await;
+    let mut peer_id = String::new();
+    daemon
+        .client
+        .send(Op::NodeId, |event| {
+            if let EventKind::Line { text } = event.kind {
+                peer_id = text;
+            }
+        })
+        .await
+        .unwrap();
+
+    daemon
+        .client
+        .run(Op::Grant {
+            peer: peer_id.clone(),
+            privilege: "blob-list".into(),
+        })
+        .await
+        .unwrap();
+    daemon
+        .client
+        .run(Op::Revoke {
+            peer: peer_id.clone(),
+            privilege: "blob-list".into(),
+        })
+        .await
+        .unwrap();
+
+    let mut lines: Vec<String> = Vec::new();
+    daemon
+        .client
+        .send(
+            Op::Grants {
+                peer: None,
+                privilege: None,
+            },
+            |event| {
+                if let EventKind::Line { text } = event.kind {
+                    lines.push(text);
+                }
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(lines, vec!["No grants."]);
+    daemon.shutdown().await;
+}
