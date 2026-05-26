@@ -75,7 +75,11 @@ pub enum Op {
     },
     /// List all rings.
     RingList,
-    /// Add `peer` to `ring`, optionally under a human-readable `nickname`.
+    /// Add `peer` to `ring`.
+    ///
+    /// If the peer is not yet in the peer store it is automatically registered
+    /// there with no nickname. Use [`Op::PeerAdd`] to set a nickname beforehand
+    /// or [`Op::PeerNick`] afterwards.
     RingAdd {
         /// Name of the ring to add the peer to.
         ring: String,
@@ -83,8 +87,6 @@ pub enum Op {
         ///
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
-        /// Optional human-readable label for this peer.
-        nickname: Option<String>,
     },
     /// Remove `peer` from `ring`.
     RingRemove {
@@ -163,6 +165,48 @@ pub enum Op {
     /// [`EndpointId`]: iroh::EndpointId
     RemoteBlobList {
         /// Base32 [`EndpointId`] string of the remote node to query.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+    },
+    /// Add `peer` to the peer store, optionally with a nickname.
+    ///
+    /// Idempotent: if the peer is already in the store the nickname is updated.
+    /// `peer` is a base32-encoded [`EndpointId`].
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
+    PeerAdd {
+        /// Base32 [`EndpointId`] string of the peer to register.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+        /// Optional human-readable label for this peer.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        nickname: Option<String>,
+    },
+    /// List all peers in the local peer store with their nicknames.
+    PeerList,
+    /// Set or update the nickname for a peer already in the store.
+    ///
+    /// `peer` is a base32-encoded [`EndpointId`].
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
+    PeerNick {
+        /// Base32 [`EndpointId`] string of the peer to rename.
+        ///
+        /// [`EndpointId`]: iroh::EndpointId
+        peer: String,
+        /// New nickname to assign.
+        nickname: String,
+    },
+    /// Remove a peer from the local peer store and from all rings.
+    ///
+    /// Errors if the peer is not in the store. `peer` is a base32-encoded
+    /// [`EndpointId`].
+    ///
+    /// [`EndpointId`]: iroh::EndpointId
+    PeerRemove {
+        /// Base32 [`EndpointId`] string of the peer to remove.
         ///
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
@@ -480,5 +524,93 @@ mod tests {
         };
         let parsed: Op = serde_json::from_str(&serde_json::to_string(&original).unwrap()).unwrap();
         assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn op_ring_add_serializes_without_nickname_field() {
+        let json = serde_json::to_string(&Op::RingAdd {
+            ring: "friends".into(),
+            peer: "abc123".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"ring_add","ring":"friends","peer":"abc123"}"#
+        );
+    }
+
+    #[test]
+    fn op_peer_add_without_nickname_omits_nickname_field() {
+        let json = serde_json::to_string(&Op::PeerAdd {
+            peer: "abc123".into(),
+            nickname: None,
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"op":"peer_add","peer":"abc123"}"#);
+    }
+
+    #[test]
+    fn op_peer_add_with_nickname_includes_nickname_field() {
+        let json = serde_json::to_string(&Op::PeerAdd {
+            peer: "abc123".into(),
+            nickname: Some("alice".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"peer_add","peer":"abc123","nickname":"alice"}"#
+        );
+    }
+
+    #[test]
+    fn op_peer_list_serializes_correctly() {
+        assert_eq!(
+            serde_json::to_string(&Op::PeerList).unwrap(),
+            r#"{"op":"peer_list"}"#
+        );
+    }
+
+    #[test]
+    fn op_peer_nick_serializes_correctly() {
+        let json = serde_json::to_string(&Op::PeerNick {
+            peer: "abc123".into(),
+            nickname: "alice".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"peer_nick","peer":"abc123","nickname":"alice"}"#
+        );
+    }
+
+    #[test]
+    fn op_peer_remove_serializes_correctly() {
+        let json = serde_json::to_string(&Op::PeerRemove {
+            peer: "abc123".into(),
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"op":"peer_remove","peer":"abc123"}"#);
+    }
+
+    #[test]
+    fn op_peer_add_round_trips_with_nickname() {
+        let original = Op::PeerAdd {
+            peer: "abc123".into(),
+            nickname: Some("alice".into()),
+        };
+        let parsed: Op = serde_json::from_str(&serde_json::to_string(&original).unwrap()).unwrap();
+        assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn op_peer_add_without_nickname_deserializes_correctly() {
+        let op: Op = serde_json::from_str(r#"{"op":"peer_add","peer":"abc123"}"#).unwrap();
+        assert_eq!(
+            op,
+            Op::PeerAdd {
+                peer: "abc123".into(),
+                nickname: None,
+            }
+        );
     }
 }
