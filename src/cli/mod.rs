@@ -19,10 +19,9 @@
 //!
 //! # Manage the local peer address book
 //! rdrop peer add <peer-id>                    # register a peer
-//! rdrop peer add <peer-id> --nickname alice   # register with a nickname
+//! rdrop peer add <peer-id> --nickname alice   # register with a nickname (idempotent; re-run to rename)
 //! rdrop peer list                             # list all known peers
-//! rdrop peer nick <peer-id> alice             # set or update a nickname
-//! rdrop peer remove <peer-id>                 # remove peer from address book and all rings
+//! rdrop peer remove <peer-id>                 # remove peer from address book, rings, and grants
 //!
 //! # Import a file and get a ticket (shortcut)
 //! rdrop import file.txt                       # untagged — warns until tagged

@@ -1,9 +1,8 @@
 //! Handlers for peer address-book ops: [`Op::PeerAdd`], [`Op::PeerList`],
-//! [`Op::PeerNick`], and [`Op::PeerRemove`].
+//! and [`Op::PeerRemove`].
 //!
 //! [`Op::PeerAdd`]: crate::daemon::protocol::Op::PeerAdd
 //! [`Op::PeerList`]: crate::daemon::protocol::Op::PeerList
-//! [`Op::PeerNick`]: crate::daemon::protocol::Op::PeerNick
 //! [`Op::PeerRemove`]: crate::daemon::protocol::Op::PeerRemove
 
 use anyhow::Result;
@@ -13,10 +12,12 @@ use crate::core::grants::{GrantStore, Privilege};
 use crate::core::peers::PeerStore;
 use crate::util::{format_peer_entry, parse_peer_id};
 
-/// Add or upsert a peer in the store.
+/// Register a peer in the store, optionally setting or updating its nickname.
 ///
-/// If the peer is already known the nickname is updated (or cleared when
-/// `nickname` is `None`). Returns a confirmation line.
+/// - With `nickname`: always writes the new nickname (idempotent when the same
+///   value is passed twice).
+/// - Without `nickname`: registers the peer if absent; preserves any existing
+///   nickname if the peer is already known.
 ///
 /// # Errors
 ///
@@ -27,10 +28,12 @@ pub(crate) fn peer_add_lines(
     nickname: Option<&str>,
 ) -> Result<Vec<String>> {
     let peer_id = parse_peer_id(peer_str)?;
-    peer_store.upsert(peer_id, nickname)?;
-    let line = match nickname {
-        Some(nick) => format!("Peer {peer_id} added ({nick})"),
-        None => format!("Peer {peer_id} added"),
+    let line = if let Some(nick) = nickname {
+        peer_store.upsert(peer_id, Some(nick))?;
+        format!("Peer {peer_id} added ({nick})")
+    } else {
+        peer_store.ensure(peer_id)?;
+        format!("Peer {peer_id} added")
     };
     Ok(vec![line])
 }
@@ -53,24 +56,6 @@ pub(crate) fn peer_list_lines(peer_store: &PeerStore) -> Result<Vec<String>> {
         out.push(format!("  {}", format_peer_entry(&peer, nick.as_deref())));
     }
     Ok(out)
-}
-
-/// Set or update the nickname for an existing peer.
-///
-/// # Errors
-///
-/// Returns an error if the peer is not in the store, or if the store write
-/// fails.
-pub(crate) fn peer_nick_lines(
-    peer_store: &PeerStore,
-    peer_str: &str,
-    nickname: &str,
-) -> Result<Vec<String>> {
-    let peer_id = parse_peer_id(peer_str)?;
-    peer_store.set_nickname(peer_id, nickname)?;
-    Ok(vec![format!(
-        "Nickname for {peer_id} set to \"{nickname}\""
-    )])
 }
 
 /// Remove a peer from the store, all rings, and all catalog grants.
@@ -205,22 +190,29 @@ mod tests {
     }
 
     #[test]
-    fn peer_nick_updates_existing_peer() {
+    fn peer_add_without_nickname_preserves_existing_nickname() {
         let dir = TempDir::new().unwrap();
         let (_, peers, _) = setup(&dir);
         let (peer_id, peer_str) = new_peer();
-        peers.upsert(peer_id, None).unwrap();
+        peer_add_lines(&peers, &peer_str, Some("alice")).unwrap();
 
-        peer_nick_lines(&peers, &peer_str, "bob").unwrap();
-        assert_eq!(peers.get(&peer_id).unwrap(), Some(Some("bob".to_owned())));
+        peer_add_lines(&peers, &peer_str, None).unwrap();
+        assert_eq!(
+            peers.get(&peer_id).unwrap(),
+            Some(Some("alice".to_owned())),
+            "nickname must be preserved when peer add is called without --nickname"
+        );
     }
 
     #[test]
-    fn peer_nick_on_unknown_peer_errors() {
+    fn peer_add_with_same_nickname_is_idempotent() {
         let dir = TempDir::new().unwrap();
         let (_, peers, _) = setup(&dir);
-        let (_, peer_str) = new_peer();
-        assert!(peer_nick_lines(&peers, &peer_str, "ghost").is_err());
+        let (peer_id, peer_str) = new_peer();
+
+        peer_add_lines(&peers, &peer_str, Some("alice")).unwrap();
+        peer_add_lines(&peers, &peer_str, Some("alice")).unwrap();
+        assert_eq!(peers.get(&peer_id).unwrap(), Some(Some("alice".to_owned())));
     }
 
     #[test]

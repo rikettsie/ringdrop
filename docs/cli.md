@@ -79,22 +79,23 @@ Manage the local peer address book. Peers registered here can be given human-rea
 
 | Command | Description |
 |---|---|
-| `rdrop peer add <peer-id>` | Register a peer in the address book |
-| `rdrop peer add <peer-id> --nickname <name>` | Register with a nickname |
+| `rdrop peer add <peer-id>` | Register a peer; preserves any existing nickname |
+| `rdrop peer add <peer-id> --nickname <name>` | Register or rename a peer |
 | `rdrop peer list` | List all known peers |
-| `rdrop peer nick <peer-id> <nickname>` | Set or update a peer's nickname |
-| `rdrop peer remove <peer-id>` | Remove peer from address book and all rings |
+| `rdrop peer remove <peer-id>` | Remove peer from address book, all rings, and all grants |
 
 ```sh
 rdrop peer add <peer-id>
 rdrop peer add <peer-id> --nickname alice
+rdrop peer add <peer-id> --nickname bob   # rename: run again with a different nickname
 rdrop peer list
-rdrop peer nick <peer-id> alice
 rdrop peer remove <peer-id>
 ```
 
 **Notes:**
-- `peer remove` also removes the peer from every ring they are a member of.
+- `peer add` is idempotent: calling it twice with the same peer and nickname is a no-op.
+- `peer add` without `--nickname` preserves any existing nickname.
+- `peer remove` also removes the peer from every ring and revokes all their catalog grants.
 - `peer remove` errors if the peer is not in the address book (consistent with `ring remove` and `grant remove`).
 
 ---

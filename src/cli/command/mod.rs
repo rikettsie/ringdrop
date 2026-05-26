@@ -232,16 +232,6 @@ pub(super) enum PeerCmd {
     /// List all peers in the local address book
     List,
 
-    /// Set or update the nickname for a known peer
-    Nick {
-        /// Base32 peer-id to rename
-        #[arg(value_name = "PEER-ID")]
-        peer: String,
-        /// New nickname to assign
-        #[arg(value_name = "NICKNAME")]
-        nickname: String,
-    },
-
     /// Remove a peer from the address book and from all rings
     Remove {
         /// Base32 peer-id to remove

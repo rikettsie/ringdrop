@@ -11,7 +11,6 @@ pub(crate) async fn run(cmd: PeerCmd, data_dir: &Path) -> Result<()> {
     let op = match cmd {
         PeerCmd::Add { peer, nickname } => Op::PeerAdd { peer, nickname },
         PeerCmd::List => Op::PeerList,
-        PeerCmd::Nick { peer, nickname } => Op::PeerNick { peer, nickname },
         PeerCmd::Remove { peer } => Op::PeerRemove { peer },
     };
     client.run(op).await

@@ -78,8 +78,7 @@ pub enum Op {
     /// Add `peer` to `ring`.
     ///
     /// If the peer is not yet in the peer store it is automatically registered
-    /// there with no nickname. Use [`Op::PeerAdd`] to set a nickname beforehand
-    /// or [`Op::PeerNick`] afterwards.
+    /// there with no nickname. Use [`Op::PeerAdd`] with `--nickname` to set one.
     RingAdd {
         /// Name of the ring to add the peer to.
         ring: String,
@@ -186,19 +185,6 @@ pub enum Op {
     },
     /// List all peers in the local peer store with their nicknames.
     PeerList,
-    /// Set or update the nickname for a peer already in the store.
-    ///
-    /// `peer` is a base32-encoded [`EndpointId`].
-    ///
-    /// [`EndpointId`]: iroh::EndpointId
-    PeerNick {
-        /// Base32 [`EndpointId`] string of the peer to rename.
-        ///
-        /// [`EndpointId`]: iroh::EndpointId
-        peer: String,
-        /// New nickname to assign.
-        nickname: String,
-    },
     /// Remove a peer from the local peer store and from all rings.
     ///
     /// Errors if the peer is not in the store. `peer` is a base32-encoded
@@ -567,19 +553,6 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Op::PeerList).unwrap(),
             r#"{"op":"peer_list"}"#
-        );
-    }
-
-    #[test]
-    fn op_peer_nick_serializes_correctly() {
-        let json = serde_json::to_string(&Op::PeerNick {
-            peer: "abc123".into(),
-            nickname: "alice".into(),
-        })
-        .unwrap();
-        assert_eq!(
-            json,
-            r#"{"op":"peer_nick","peer":"abc123","nickname":"alice"}"#
         );
     }
 
