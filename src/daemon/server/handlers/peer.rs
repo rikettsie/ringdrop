@@ -10,7 +10,7 @@ use anyhow::Result;
 use iroh_rings::Registry;
 
 use crate::core::peers::PeerStore;
-use crate::util::parse_peer_id;
+use crate::util::{format_peer_entry, parse_peer_id};
 
 /// Add or upsert a peer in the store.
 ///
@@ -49,10 +49,7 @@ pub(crate) fn peer_list_lines(peer_store: &PeerStore) -> Result<Vec<String>> {
     }
     let mut out = vec![format!("{} peers:", peers.len())];
     for (peer, nick) in peers {
-        match nick {
-            Some(n) => out.push(format!("  {peer}  ({n})")),
-            None => out.push(format!("  {peer}")),
-        }
+        out.push(format!("  {}", format_peer_entry(&peer, nick.as_deref())));
     }
     Ok(out)
 }

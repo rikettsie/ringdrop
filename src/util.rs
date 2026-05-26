@@ -41,16 +41,24 @@ pub(crate) fn relay_only_addr(full: EndpointAddr) -> EndpointAddr {
         })
 }
 
+/// Format a peer ID with an optional nickname into a display string.
+///
+/// Returns `"peer_id  (nickname)"` when a nickname is provided, or the peer ID
+/// alone when `nick` is `None`.
+pub(crate) fn format_peer_entry(peer: &EndpointId, nick: Option<&str>) -> String {
+    match nick {
+        Some(n) => format!("{peer}  ({n})"),
+        None => peer.to_string(),
+    }
+}
+
 /// Format a peer for display, resolving its nickname from the peer store.
 ///
-/// Returns `"nickname (peer_id)"` when a nickname is set, or the full peer ID
-/// string when the peer is unknown or has no nickname. Silently falls back to
-/// the raw ID on store read errors.
+/// Delegates to [`format_peer_entry`] after looking up the nickname. Silently
+/// falls back to the raw ID on store read errors.
 pub(crate) fn display_peer(peer: &EndpointId, store: &PeerStore) -> String {
-    match store.get(peer) {
-        Ok(Some(Some(nick))) => format!("{peer}  ({nick})"),
-        _ => peer.to_string(),
-    }
+    let nick = store.get(peer).ok().flatten().flatten();
+    format_peer_entry(peer, nick.as_deref())
 }
 
 /// Parse a BLAKE3 [`Hash`] from its hex string representation.
