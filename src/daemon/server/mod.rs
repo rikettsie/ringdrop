@@ -255,17 +255,13 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
             send_lines(tx, req_id, &lines).await;
             let _ = tx.send(Event::done(req_id)).await;
         }
-        Op::RingAdd {
-            ring,
-            peer,
-            nickname,
-        } => {
+        Op::RingAdd { ring, peer } => {
             let lines = handlers::ring::ring_add_lines(
                 &node.registry,
+                &node.peers,
                 node.endpoint.id(),
                 &ring,
                 &peer,
-                nickname.as_deref(),
             )?;
             send_lines(tx, req_id, &lines).await;
             let _ = tx.send(Event::done(req_id)).await;
@@ -276,7 +272,27 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
             let _ = tx.send(Event::done(req_id)).await;
         }
         Op::RingMembers { ring } => {
-            let lines = handlers::ring::ring_members_lines(&node.registry, &ring)?;
+            let lines = handlers::ring::ring_members_lines(&node.registry, &node.peers, &ring)?;
+            send_lines(tx, req_id, &lines).await;
+            let _ = tx.send(Event::done(req_id)).await;
+        }
+        Op::PeerAdd { peer, nickname } => {
+            let lines = handlers::peer::peer_add_lines(&node.peers, &peer, nickname.as_deref())?;
+            send_lines(tx, req_id, &lines).await;
+            let _ = tx.send(Event::done(req_id)).await;
+        }
+        Op::PeerList => {
+            let lines = handlers::peer::peer_list_lines(&node.peers)?;
+            send_lines(tx, req_id, &lines).await;
+            let _ = tx.send(Event::done(req_id)).await;
+        }
+        Op::PeerNick { peer, nickname } => {
+            let lines = handlers::peer::peer_nick_lines(&node.peers, &peer, &nickname)?;
+            send_lines(tx, req_id, &lines).await;
+            let _ = tx.send(Event::done(req_id)).await;
+        }
+        Op::PeerRemove { peer } => {
+            let lines = handlers::peer::peer_remove_lines(&node.peers, &node.registry, &peer)?;
             send_lines(tx, req_id, &lines).await;
             let _ = tx.send(Event::done(req_id)).await;
         }
