@@ -57,4 +57,5 @@ pub mod cli;
 pub mod config;
 pub mod core;
 pub mod daemon;
+pub(crate) mod local_store;
 pub mod util;
