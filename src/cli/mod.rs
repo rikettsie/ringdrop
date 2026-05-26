@@ -56,6 +56,17 @@ mod command;
 
 use std::path::PathBuf;
 
+const ABOUT: &str = "P2P streamed file transfer with ring-based access control.\n\
+                     Built on iroh and bao protocols.";
+
+const LONG_ABOUT: &str = concat!(
+    "P2P streamed file transfer with ring-based access control.\n",
+    "Built on iroh and bao protocols.\n\n",
+    "Full CLI reference: https://github.com/rikettsie/ringdrop/blob/v",
+    env!("CARGO_PKG_VERSION"),
+    "/docs/cli.md"
+);
+
 use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -66,8 +77,8 @@ use command::{Cmd, DaemonCmd};
 #[derive(Parser)]
 #[command(
     name = "rdrop",
-    about = "P2P streamed file transfer with ring-based access control.\n\
-             Built on iroh and bao protocols.",
+    about = ABOUT,
+    long_about = LONG_ABOUT,
     version
 )]
 struct Cli {

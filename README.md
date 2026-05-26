@@ -29,120 +29,23 @@ Access control is enforced at the connection level. Ring–resource associations
 | macOS | `brew tap rikettsie/tap && brew install rdrop` |
 | Windows (PowerShell) | `scoop bucket add rikettsie https://github.com/rikettsie/scoop-bucket; scoop install rdrop` |
 
-For prerequisites, alternative methods, and troubleshooting see [install/INSTALL.md](install/INSTALL.md).
+For prerequisites, alternative methods, and troubleshooting see [docs/install.md](docs/install.md).
 
-## Usage
+## Commands
 
-### Print your `peer-id`
+Full reference: [docs/cli.md](docs/cli.md)
 
-Share your `peer-id` (i.e. your node public id) with others so they can add you to their rings:
-
-```sh
-rdrop id
-```
-
-### Manage rings
-
-```sh
-rdrop ring new <ring-name>                                   # create a private ring
-rdrop ring list                                              # list all rings
-rdrop ring add <ring-name> <peer-id>                         # add a peer to a ring
-rdrop ring add <ring-name> <peer-id> --nickname <nickname>   # with a display label
-rdrop ring remove <ring-name> <peer-id>                      # remove a peer
-rdrop ring members <ring-name>                               # list peers of a ring
-```
-
-### Import and manage files (blobs)
-
-**Import** a file or directory into the local blob store and produce a ticket:
-
-```sh
-rdrop import <file-name>                    # shortcut, warns if not associated with any ring
-rdrop import <file-name> --open             # publicly accessible
-rdrop import <file-name> --tag <ring-name>  # restrict to a ring
-
-rdrop blob import <file-name> --open        # same, via blob subcommand
-```
-
-If no `--ring` or `--open` is given, then the file is not associated with any ring and a warning is printed. The blob cannot be transferred until it is associated with a ring.
-If the file was already imported, the existing rings are summarised instead.
-
-`rdrop blob` groups all blob lifecycle operations. `rdrop import` is a shortcut for `rdrop blob import`.
-
-**List** all local blobs with their ring tags and share ticket:
-
-```sh
-rdrop blob list
-```
-
-**Remove** a blob from the local store and all its ring associations:
-
-```sh
-rdrop blob remove <file-name>
-rdrop blob remove <hash>
-```
-
-### Grant or change access
-
-Associate a file with one or more rings:
-
-```sh
-rdrop tag <file-name> --ring <ring-name>   # restrict to a ring
-rdrop tag <file-name> --open   # anyone with the ticket
-rdrop tag <hash>   --ring <ring-name>   # same, by BLAKE3 hash
-rdrop tag <hash>   --open
-```
-
-### Manage catalog grants
-
-Control which peers can query your local blob list (i.e. run `rdrop remote blob-list` against your node):
-
-```sh
-rdrop grant add <peer-id> <privilege>   # grant a privilege (e.g. blob-list)
-rdrop grant remove <peer-id> <privilege>   # revoke it
-rdrop grant list [--peer <peer-id>] [--privilege <privilege>]   # list all grants (eventually filtered by peer and/or privilege)
-```
-
-The only privilege currently defined is `blob-list`, which lets a peer enumerate the blobs visible to them on your node (they only see what they already have access to download via ring-membership {Read} permission).
-
-### Query remote nodes
-
-List the blobs accessible to you on another node (the remote must have granted you the `blob-list` privilege):
-
-```sh
-rdrop remote blob-list <peer-id>
-```
-
-### Start the daemon
-
-`rdrop` serves blobs through a background daemon. Start it once; it keeps running until you stop it:
-
-```sh
-rdrop daemon start    # start in the background
-rdrop daemon status   # show status and node ID
-rdrop daemon stop     # stop the daemon
-```
-
-The daemon serves every blob that has been associated with a ring — there is no per-file serving step to do.
-
-### Receive a file
-
-```sh
-rdrop receive rdrop://ABCDEF... [--dest ./downloads]
-```
-
-Re-run the same command to resume an interrupted transfer.
-
-## Activate more logging
-
-By default only warnings are printed. Set `RUST_LOG` to get more detail:
-
-```sh
-RUST_LOG=ringdrop=info rdrop daemon start   # info-level logs for all ringdrop code
-RUST_LOG=debug rdrop daemon start           # debug logs including iroh internals
-```
-
-This applies to every command, not just the daemon.
+| Command | Description |
+|---|---|
+| `rdrop id` | Print your peer-id so others can add you to their rings |
+| `rdrop daemon` | Start, stop, and inspect the background daemon |
+| `rdrop ring` | Manage rings (create, list, add/remove peers, view members) |
+| `rdrop peer` | Manage the local peer address book with optional nicknames |
+| `rdrop import` | Import a file or directory and get a shareable ticket |
+| `rdrop blob` | Full blob lifecycle: import, list, remove |
+| `rdrop receive` | Download from a ticket (automatically resumes if interrupted) |
+| `rdrop grant` | Control which peers can query your blob list |
+| `rdrop remote` | Query blob lists on remote nodes |
 
 ## Contributing
 
