@@ -80,22 +80,35 @@ pub struct GrantStore {
 }
 
 impl GrantStore {
-    /// Open (or create) the grant store at `path`.
+    /// Open (or create) the grant store at `path`, backed by a dedicated database.
     ///
-    /// Creates the `GRANTS` table on first use.
+    /// Convenience wrapper around [`Self::from_db`] for standalone and test use.
     ///
     /// # Errors
     ///
     /// Returns an error if the database file cannot be opened or the initial
     /// table setup fails.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let db = Database::create(path).context("opening grants database")?;
+        let db = Arc::new(Database::create(path).context("opening grants database")?);
+        Self::from_db(db)
+    }
+
+    /// Attach the grant store to an existing shared database.
+    ///
+    /// Creates the `GRANTS` table if it does not yet exist. Use this when
+    /// `GrantStore` and `PeerStore` share the same `local.redb` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the table cannot be created or the init transaction
+    /// fails.
+    pub fn from_db(db: Arc<Database>) -> Result<Self> {
         let write = db
             .begin_write()
             .context("starting grants init transaction")?;
         write.open_table(GRANTS).context("creating grants table")?;
         write.commit().context("committing grants init")?;
-        Ok(Self { db: Arc::new(db) })
+        Ok(Self { db })
     }
 
     /// Grant `privilege` to `peer`.

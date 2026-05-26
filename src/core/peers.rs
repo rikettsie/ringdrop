@@ -43,23 +43,35 @@ pub struct PeerStore {
 }
 
 impl PeerStore {
-    /// Open (or create) the peer store at `path`.
+    /// Open (or create) the peer store at `path`, backed by a dedicated database.
     ///
-    /// Creates the `PEERS` table on first use. Safe to call on an existing
-    /// `peers.redb` — the table is added if absent, existing rows are untouched.
+    /// Convenience wrapper around [`Self::from_db`] for standalone and test use.
     ///
     /// # Errors
     ///
     /// Returns an error if the database file cannot be opened or the initial
     /// table setup fails.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let db = Database::create(path).context("opening peers database")?;
+        let db = Arc::new(Database::create(path).context("opening peers database")?);
+        Self::from_db(db)
+    }
+
+    /// Attach the peer store to an existing shared database.
+    ///
+    /// Creates the `PEERS` table if it does not yet exist. Use this when
+    /// `PeerStore` and `GrantStore` share the same `local.redb` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the table cannot be created or the init transaction
+    /// fails.
+    pub fn from_db(db: Arc<Database>) -> Result<Self> {
         let write = db
             .begin_write()
             .context("starting peers init transaction")?;
         write.open_table(PEERS).context("creating peers table")?;
         write.commit().context("committing peers init")?;
-        Ok(Self { db: Arc::new(db) })
+        Ok(Self { db })
     }
 
     /// Add `peer` to the store with an optional nickname, or update the
