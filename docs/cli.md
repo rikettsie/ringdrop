@@ -191,7 +191,7 @@ rdrop receive rdrop://ABCDEF... --dest ./downloads/file.txt
 
 ## `rdrop grant`
 
-Control which peers can query your local blob list via `rdrop remote blob-list`.
+Grant specific rights to remote peers on your local node.
 
 | Command | Description |
 |---|---|
@@ -201,7 +201,7 @@ Control which peers can query your local blob list via `rdrop remote blob-list`.
 | `rdrop grant list --peer <peer-id>` | Filter by peer |
 | `rdrop grant list --privilege <privilege>` | Filter by privilege |
 
-The only currently defined privilege is `blob-list`. A peer with this privilege can enumerate the blobs they have access to on your node (they only see what their ring membership already allows them to download).
+The only currently defined privilege is `blob-list`. A peer with this privilege can list the blobs they have access to on your node (they only see what their ring membership already allows them to download).
 
 ```sh
 rdrop grant add <peer-id> blob-list
@@ -215,7 +215,7 @@ rdrop grant list --privilege blob-list
 
 ## `rdrop remote`
 
-Query remote nodes.
+Perform a command in a remote node.
 
 | Command | Description |
 |---|---|

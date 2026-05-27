@@ -46,8 +46,8 @@ Full reference: [docs/cli.md](docs/cli.md)
 | `rdrop tag` | Associate an already-imported blob with a ring (or mark it open) |
 | `rdrop untag` | Remove ring associations from a blob (revoke access) |
 | `rdrop receive` | Download from a ticket (automatically resumes if interrupted) |
-| `rdrop grant` | Control which peers can query your blob list |
-| `rdrop remote` | Query blob lists on remote nodes |
+| `rdrop grant` | Grant specific rights to remote peers on your local node |
+| `rdrop remote` | Perform a command in a remote node |
 
 ## Contributing
 
