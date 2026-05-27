@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-05-27
+
+### Bug Fixes
+
+- (**peer-remove**) Revoke all grants when removing a peer
+
+### Documentation
+
+- Add docs/cli.md and docs/install.md, slim README to command table
+- Add tag and untag to README command table
+
+### Features
+
+- (**peers**) Add PeerStore — local peer address book (peers.redb)
+- (**protocol**) Add peer ops, drop nickname from RingAdd
+- (**handlers**) Add peer handlers, resolve ring nicknames from PeerStore
+- (**server**) Dispatch peer ops and updated ring handlers
+- (**cli**) Add rdrop peer subcommand, drop --nickname from ring add
+- (**local-store**) Add LocalStore, migrate old redb files on startup
+- (**untag**) Add rdrop untag command to revoke ring access
+- (**migration**) Backfill peers from ring memberships into local.redb
+
+### Miscellaneous Tasks
+
+- Add docs.rs and codecov badge
+
+### Refactoring
+
+- Remove inconsistent protocol re-exports
+- Extract format_peer_entry, drop duplicated peer display logic
+- (**stores**) Add from_db constructor to GrantStore and PeerStore
+- (**node**) Use LocalStore to open the shared local.redb
+- (**peer**) Drop peer nick, peer add handles all nickname management
+- (**tags**) Drop tags, blob list already shows ring associations
+
 ## [0.9.0] - 2026-05-25
 
 ### Bug Fixes
