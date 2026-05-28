@@ -66,13 +66,14 @@ git config core.hooksPath .githooks
 | `/iroh-rings/2` | Blob transfer — gate enforces ring membership and `Read` permission before any data is transferred |
 | `/ringdrop/catalog/0` | Catalog queries — lets a peer list the blobs accessible to them on a remote node (requires `blob-list` grant) |
 
-## Dependencies
+## Notable dependencies
 
 `ringdrop` is built on:
 
 | Crate | Role |
 |---|---|
 | [iroh](https://github.com/n0-computer/iroh) | QUIC transport, NAT traversal, relay fallback |
+| [iroh-rings](https://github.com/rikettsie/iroh-rings) | Ring-based access control, grant management |
 | [iroh-blobs](https://github.com/n0-computer/iroh-blobs) | BLAKE3 chunking, `FsStore`, verified streaming |
 | [bao-tree](https://github.com/n0-computer/bao-tree) | bao encoding/decoding, `ChunkRanges`, bitfield conversion |
 | [redb](https://github.com/cberner/redb) | Embedded persistent store for the ring registry |
