@@ -5,7 +5,7 @@
 If you have [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) installed, you can skip compilation entirely:
 
 ```sh
-cargo binstall rdrop
+cargo binstall ringdrop
 ```
 
 > **Note:** pre-built binary downloads are supported from **v0.11.0** onwards.
