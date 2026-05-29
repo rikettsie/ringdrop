@@ -59,3 +59,11 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/rdrop-{ version }-{ target }.{ archive-format }"
+bin-dir = "rdrop{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
