@@ -1,5 +1,18 @@
 # Installation
 
+## Via cargo-binstall (all platforms)
+
+If you have [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) installed, you can skip compilation entirely:
+
+```sh
+cargo binstall rdrop
+```
+
+> **Note:** pre-built binary downloads are supported from **v0.11.0** onwards.
+> Installing an older version falls back to compiling from source automatically.
+
+---
+
 ## Linux
 
 ### Via Cargo (recommended)

@@ -28,6 +28,7 @@ Access control is enforced at the connection level. Ring–resource associations
 | Linux | `cargo install ringdrop` |
 | macOS | `brew tap rikettsie/tap && brew install rdrop` |
 | Windows (PowerShell) | `scoop bucket add rikettsie https://github.com/rikettsie/scoop-bucket; scoop install rdrop` |
+| All platforms (pre-built bin) | `cargo binstall rdrop` |
 
 For prerequisites, alternative methods, and troubleshooting see [docs/install.md](docs/install.md).
 
