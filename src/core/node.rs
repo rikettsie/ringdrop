@@ -525,6 +525,7 @@ mod tests {
         let cfg = Config {
             secret_key: SecretKey::generate(),
             daemon_port: 60001,
+            relay_url: None,
         };
         let node = Node::start(dir.path(), cfg, InMemoryRegistry::default())
             .await

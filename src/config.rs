@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use iroh::{EndpointId, SecretKey};
+use iroh::{EndpointId, RelayUrl, SecretKey};
 use serde::{Deserialize, Serialize};
 
 /// Persistent node configuration, stored as JSON in the data directory.
@@ -22,6 +22,13 @@ pub struct Config {
     /// TCP port the daemon listens on for local IPC connections (default: 60001).
     #[serde(default = "Config::default_daemon_port")]
     pub daemon_port: u16,
+    /// Custom iroh relay URL. When absent the node uses n0's public relay infrastructure.
+    ///
+    /// Must be a valid HTTPS URL pointing to a running
+    /// [iroh-relay](https://github.com/n0-computer/iroh/tree/main/iroh-relay) instance.
+    /// An invalid URL is rejected at daemon start with a clear error.
+    #[serde(default)]
+    pub relay_url: Option<RelayUrl>,
 }
 
 impl Config {
@@ -41,7 +48,8 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// Returns an error if the file exists but cannot be read or parsed.
+    /// Returns an error if the file exists but cannot be read, cannot be parsed,
+    /// or contains a `relay_url` that is not a valid URL.
     pub fn load_or_create(data_dir: &Path) -> Result<Self> {
         let path = data_dir.join("config.json");
         if path.exists() {
@@ -52,6 +60,7 @@ impl Config {
             let cfg = Config {
                 secret_key: SecretKey::generate(),
                 daemon_port: Self::default_daemon_port(),
+                relay_url: None,
             };
             let raw = serde_json::to_string_pretty(&cfg)?;
             std::fs::write(&path, raw).with_context(|| format!("writing {}", path.display()))?;
@@ -101,5 +110,39 @@ mod tests {
         std::fs::write(dir.path().join("config.json"), b"not valid json").unwrap();
         let err = Config::load_or_create(dir.path()).unwrap_err();
         assert!(err.to_string().contains("parsing"));
+    }
+
+    #[test]
+    fn relay_url_absent_defaults_to_none() {
+        let dir = tmpdir();
+        let key = iroh::SecretKey::generate();
+        let legacy = serde_json::json!({ "secret_key": key });
+        std::fs::write(dir.path().join("config.json"), legacy.to_string()).unwrap();
+        let cfg = Config::load_or_create(dir.path()).unwrap();
+        assert!(cfg.relay_url.is_none());
+    }
+
+    #[test]
+    fn relay_url_invalid_value_returns_parse_error() {
+        let dir = tmpdir();
+        let key = iroh::SecretKey::generate();
+        let bad = serde_json::json!({ "secret_key": key, "relay_url": "not a url" });
+        std::fs::write(dir.path().join("config.json"), bad.to_string()).unwrap();
+        let err = Config::load_or_create(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("parsing"));
+    }
+
+    #[test]
+    fn relay_url_valid_value_parses_correctly() {
+        let dir = tmpdir();
+        let key = iroh::SecretKey::generate();
+        let cfg_json =
+            serde_json::json!({ "secret_key": key, "relay_url": "https://relay.example.com" });
+        std::fs::write(dir.path().join("config.json"), cfg_json.to_string()).unwrap();
+        let cfg = Config::load_or_create(dir.path()).unwrap();
+        assert_eq!(
+            cfg.relay_url.unwrap().to_string(),
+            "https://relay.example.com/"
+        );
     }
 }
