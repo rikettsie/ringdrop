@@ -50,6 +50,20 @@ Full reference: [docs/cli.md](docs/cli.md)
 | `rdrop grant` | Grant specific rights to remote peers on your local node |
 | `rdrop remote` | Perform a command in a remote node |
 
+## Custom relay
+
+By default ringdrop uses the public relay infrastructure provided by [Number 0](https://n0.computer) (`relay.iroh.network`). You can point the node to a relay you control by adding a `relay_url` field to `config.json` (located in your data directory, `~/.local/share/ringdrop/` by default):
+
+```json
+{
+  "relay_url": "https://relay.yourdomain.com"
+}
+```
+
+When the field is absent the default n0 relay is used. An invalid URL or an unreachable relay causes the daemon to fail at startup with a clear error rather than silently falling back.
+
+> **Self-hosting a relay**: see the [iroh-relay README](https://github.com/n0-computer/iroh/tree/main/iroh-relay) for instructions on running your own relay instance. Peer discovery (pkarr/DNS) continues to use n0's `iroh.link` infrastructure regardless of which relay you choose.
+
 ## Contributing
 
 If you have ideas/contributions or anything is not working the way you expect (in which case, please include an output with `RUST_LOG=debug`) and feel free to open an issue or PR.

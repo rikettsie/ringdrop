@@ -45,7 +45,7 @@ pub struct DaemonServer<R> {
 }
 
 impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
-    /// Bind the daemon to `127.0.0.1:port` (use `0` to let the OS pick a port).
+    /// Binds the daemon to `127.0.0.1:port` (use `0` to let the OS pick a port).
     ///
     /// # Errors
     ///
@@ -72,7 +72,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
             .port()
     }
 
-    /// Run the server event loop until an [`Op::Shutdown`] request is received.
+    /// Runs the server event loop until an [`Op::Shutdown`] request is received.
     ///
     /// Accepts connections, dispatches requests, and on shutdown drains
     /// in-flight tasks (up to 30 s) before calling [`Node::shutdown`].
@@ -175,7 +175,7 @@ async fn handle_connection<R: Registry + Clone + Send + Sync + 'static>(
     Ok(())
 }
 
-/// Write one event to the TCP stream. Returns `false` if the connection should
+/// Writes one event to the TCP stream. Returns `false` if the connection should
 /// be closed — either because the event could not be serialized (logged as an
 /// error) or because the write itself failed (client disconnected, not logged).
 async fn emit(writer: &mut (impl AsyncWriteExt + Unpin), event: &Event) -> bool {

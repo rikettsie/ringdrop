@@ -53,7 +53,7 @@ pub(crate) async fn handle_tag<R: Registry + Clone + Send + Sync + 'static>(
     Ok(())
 }
 
-/// Remove ring associations from a blob.
+/// Removes ring associations from a blob.
 ///
 /// - `all`: clear every ring association.
 /// - `open`: remove only the open-ring association, keeping named rings.

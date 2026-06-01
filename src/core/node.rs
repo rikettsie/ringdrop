@@ -18,7 +18,12 @@ use std::{
 
 use anyhow::{Context, Result};
 use futures_lite::StreamExt;
-use iroh::{endpoint::presets, protocol::Router, Endpoint, EndpointAddr};
+use iroh::{
+    address_lookup::{DnsAddressLookup, PkarrPublisher},
+    endpoint::presets,
+    protocol::Router,
+    Endpoint, EndpointAddr, RelayMode,
+};
 use iroh_blobs::{
     api::blobs::{AddPathOptions, BlobStatus, ImportMode},
     format::collection::Collection,
@@ -94,7 +99,7 @@ fn peer_ring_set<R: Registry>(registry: &R, peer: &str) -> Result<HashSet<String
 }
 
 impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
-    /// Start a node, binding a QUIC endpoint and loading the blob store from `data_dir`.
+    /// Starts a node, binding a QUIC endpoint and loading the blob store from `data_dir`.
     ///
     /// The node is immediately reachable for inbound connections once this
     /// returns. The blob store is created under `data_dir/blobs/` if it does
@@ -102,13 +107,32 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the QUIC endpoint cannot bind, or if the blob store
-    /// cannot be opened or created.
+    /// Returns an error if the QUIC endpoint cannot bind, if the blob store
+    /// cannot be opened or created, or if a custom `relay_url` is configured
+    /// but the relay is unreachable at startup.
     pub async fn start(data_dir: impl AsRef<Path>, cfg: Config, registry: R) -> Result<Self> {
         let data_dir = data_dir.as_ref().to_path_buf();
         tokio::fs::create_dir_all(&data_dir).await?;
 
-        let endpoint = Endpoint::builder(presets::N0)
+        let relay_mode = match &cfg.relay_url {
+            None => RelayMode::Default,
+            Some(url) => {
+                // Probe the relay before binding so a misconfigured URL fails fast
+                // with a clear error rather than silently falling back.
+                // RELAY_PROBE_PATH in iroh-relay is "/ping".
+                reqwest::get(format!("{}ping", url))
+                    .await
+                    .with_context(|| {
+                        format!("relay probe failed for {url} — check relay_url in config.json")
+                    })?;
+                RelayMode::Custom(url.clone().into())
+            }
+        };
+
+        let endpoint = Endpoint::builder(presets::Minimal)
+            .address_lookup(PkarrPublisher::n0_dns())
+            .address_lookup(DnsAddressLookup::n0_dns())
+            .relay_mode(relay_mode)
             .secret_key(cfg.secret_key)
             .bind()
             .await
@@ -168,7 +192,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         self.endpoint.addr()
     }
 
-    /// Import a single file into the blob store.
+    /// Imports a single file into the blob store.
     ///
     /// The file is chunked, BLAKE3-hashed, and pinned with a named tag (the
     /// leaf filename, i.e. `path.file_name()`). Returns the root hash and `BlobFormat::Raw`.
@@ -204,7 +228,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok((hash, format))
     }
 
-    /// Import a directory into the blob store as an iroh-blobs collection.
+    /// Imports a directory into the blob store as an iroh-blobs collection.
     ///
     /// Each file under `dir` is imported individually; the resulting hashes are
     /// assembled into a `HashSeq` collection pinned under the directory name.
@@ -320,7 +344,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok(blobs)
     }
 
-    /// Remove a blob from the local store by deleting its named tags.
+    /// Removes a blob from the local store by deleting its named tags.
     ///
     /// Ring tags in the registry must be removed separately by the caller
     /// before invoking this method. Disk space is reclaimed on the next GC
@@ -395,7 +419,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         decode_entries(&mut recv).await
     }
 
-    /// Import a file or directory, dispatching to [`Node::import_file`] or
+    /// Imports a file or directory, dispatching to [`Node::import_file`] or
     /// [`Node::import_directory`] based on whether `path` is a file or a dir.
     ///
     /// # Errors
@@ -525,6 +549,7 @@ mod tests {
         let cfg = Config {
             secret_key: SecretKey::generate(),
             daemon_port: 60001,
+            relay_url: None,
         };
         let node = Node::start(dir.path(), cfg, InMemoryRegistry::default())
             .await

@@ -25,7 +25,7 @@ pub(crate) struct LocalStore {
 }
 
 impl LocalStore {
-    /// Open (or create) `local.redb` in `data_dir`, running migration from the
+    /// Opens (or creates) `local.redb` in `data_dir`, running migration from the
     /// old separate files if needed.
     ///
     /// # Errors
@@ -49,7 +49,7 @@ impl LocalStore {
 const GRANTS: TableDefinition<'_, &[u8], ()> = TableDefinition::new("grants");
 const PEERS: TableDefinition<'_, &[u8], &str> = TableDefinition::new("peers");
 
-/// Migrate `grants.redb` and `peers.redb` into `local.redb` when needed.
+/// Migrates `grants.redb` and `peers.redb` into `local.redb` when needed.
 ///
 /// Exits immediately when `local.redb` already exists or neither old file is
 /// present (fresh install). Otherwise:
@@ -166,7 +166,7 @@ fn copy_peers(dst: &Database, src_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Backfill the PEERS table with members found in named rings in `registry.redb`.
+/// Backfills the PEERS table with members found in named rings in `registry.redb`.
 ///
 /// Any peer that is already present in PEERS (i.e. was in `peers.redb`) is
 /// left untouched — existing nicknames are preserved. Only peers absent from

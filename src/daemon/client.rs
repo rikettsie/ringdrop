@@ -30,7 +30,7 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
-    /// Create a client that connects to the daemon on `127.0.0.1:port`.
+    /// Creates a client that connects to the daemon on `127.0.0.1:port`.
     pub fn new(port: u16) -> Self {
         Self {
             addr: SocketAddr::from(([127, 0, 0, 1], port)),
@@ -42,7 +42,7 @@ impl DaemonClient {
         TcpStream::connect(self.addr).await.is_ok()
     }
 
-    /// Send an operation to the daemon and call `on_event` for each event
+    /// Sends an operation to the daemon and calls `on_event` for each event
     /// received until [`EventKind::Done`] or [`EventKind::Error`] for this
     /// request's `req_id`.
     ///

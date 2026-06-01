@@ -59,7 +59,9 @@ pub(crate) async fn run_start(data_dir: &Path) -> Result<()> {
             let node_id = query_node_info(&client)
                 .await
                 .unwrap_or_else(|_| "?".into());
+            let relay_label = relay_label(data_dir);
             println!("Rdrop daemon started. Node ID: {node_id}");
+            println!("Relay: {relay_label}");
             return Ok(());
         }
     }
@@ -96,8 +98,12 @@ pub(crate) async fn run_status(data_dir: &Path) -> Result<()> {
         return Ok(());
     }
 
+    let relay_label = relay_label(data_dir);
     match query_node_info(&client).await {
-        Ok(id) => println!("Rdrop daemon running. Node ID: {id}"),
+        Ok(id) => {
+            println!("Rdrop daemon running. Node ID: {id}");
+            println!("Relay: {relay_label}");
+        }
         Err(e) => println!("Rdrop daemon running but failed to get node info: {e}"),
     }
     Ok(())
@@ -111,6 +117,20 @@ pub(crate) async fn run_serve(data_dir: &Path) -> Result<()> {
     let node = Node::start(data_dir, cfg, registry).await?;
 
     DaemonServer::bind(node, port).await?.run().await
+}
+
+/// Returns a human-readable relay label for display in `daemon start` and `daemon status`.
+///
+/// Reads the config from disk; if the config cannot be loaded (e.g. file missing), falls
+/// back to `"default (n0)"` so that status output is never blocked by a config error.
+fn relay_label(data_dir: &Path) -> String {
+    match Config::load_or_create(data_dir) {
+        Ok(cfg) => match cfg.relay_url {
+            Some(url) => format!("{url} (custom)"),
+            None => "default (n0)".to_owned(),
+        },
+        Err(_) => "default (n0)".to_owned(),
+    }
 }
 
 async fn query_node_info(client: &DaemonClient) -> Result<String> {

@@ -29,11 +29,11 @@ pub struct Request {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Op {
-    /// Return this node's [`EndpointId`] as a hex string.
+    /// Returns this node's [`EndpointId`] as a hex string.
     ///
     /// [`EndpointId`]: iroh::EndpointId
     NodeId,
-    /// Import a file or directory and tag it with the given rings.
+    /// Imports a file or directory and tags it with the given rings.
     Import {
         /// Path to the file or directory to import.
         path: PathBuf,
@@ -42,19 +42,19 @@ pub enum Op {
         /// Tag the blob as publicly accessible, overriding `rings`.
         open: bool,
     },
-    /// List all blobs in the local store.
+    /// Lists all blobs in the local store.
     BlobList {
         /// Optional filter by this peer-id.
         peer: Option<String>,
         /// Optional filter by a ring name.
         rings: Option<Vec<String>>,
     },
-    /// Remove a blob from the local store. `target` is a filename or hex hash.
+    /// Removes a blob from the local store. `target` is a filename or hex hash.
     BlobRemove {
         /// File path or BLAKE3 hex hash identifying the blob to remove.
         target: String,
     },
-    /// Tag a blob with the given rings (or the open ring). `target` is a filename or hex hash.
+    /// Tags a blob with the given rings (or the open ring). `target` is a filename or hex hash.
     Tag {
         /// File path or BLAKE3 hex hash identifying the blob to tag.
         target: String,
@@ -63,7 +63,7 @@ pub enum Op {
         /// Tag the blob as publicly accessible, overriding `rings`.
         open: bool,
     },
-    /// Remove ring associations from a blob. `target` is a filename or hex hash.
+    /// Removes ring associations from a blob. `target` is a filename or hex hash.
     ///
     /// Exactly one of `rings` (non-empty), `open`, or `all` must be set.
     Untag {
@@ -76,14 +76,14 @@ pub enum Op {
         /// Remove every ring association, making the blob inaccessible.
         all: bool,
     },
-    /// Create a new ring with the given name.
+    /// Creates a new ring with the given name.
     RingNew {
         /// Name for the new ring (e.g. `"friends"` or `"work-team"`).
         name: String,
     },
-    /// List all rings.
+    /// Lists all rings.
     RingList,
-    /// Add `peer` to `ring`.
+    /// Adds `peer` to `ring`.
     ///
     /// If the peer is not yet in the peer store it is automatically registered
     /// there with no nickname. Use [`Op::PeerAdd`] with `--nickname` to set one.
@@ -95,7 +95,7 @@ pub enum Op {
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
     },
-    /// Remove `peer` from `ring`.
+    /// Removes `peer` from `ring`.
     RingRemove {
         /// Name of the ring to remove the peer from.
         ring: String,
@@ -104,12 +104,12 @@ pub enum Op {
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
     },
-    /// List all members of `ring`.
+    /// Lists all members of `ring`.
     RingMembers {
         /// Name of the ring whose membership to list.
         ring: String,
     },
-    /// Download the blob described by `ticket` and export it to `dest`.
+    /// Downloads the blob described by `ticket` and exports it to `dest`.
     Receive {
         /// URI-encoded [`ShareTicket`] produced by `rdrop import` or `rdrop blob list`.
         ///
@@ -120,7 +120,7 @@ pub enum Op {
         /// Overwrite an existing destination without prompting.
         force_overwrite: bool,
     },
-    /// Grant `privilege` to `peer`.
+    /// Grants `privilege` to `peer`.
     ///
     /// `peer` is a base32-encoded [`EndpointId`]; `privilege` is the canonical
     /// privilege name (e.g. `"blob-list"`).
@@ -134,7 +134,7 @@ pub enum Op {
         /// Privilege to grant (e.g. `"blob-list"`).
         privilege: String,
     },
-    /// Revoke `privilege` from `peer`.
+    /// Revokes `privilege` from `peer`.
     ///
     /// `peer` is a base32-encoded [`EndpointId`]; `privilege` is the canonical
     /// privilege name (e.g. `"blob-list"`).
@@ -148,7 +148,7 @@ pub enum Op {
         /// Privilege to revoke (e.g. `"blob-list"`).
         privilege: String,
     },
-    /// List current grants as `privilege peer_id` pairs, one per [`EventKind::Line`].
+    /// Lists current grants as `privilege peer_id` pairs, one per [`EventKind::Line`].
     ///
     /// Both filters are optional; omitting them returns all grants.
     Grants {
@@ -161,7 +161,7 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         privilege: Option<String>,
     },
-    /// Fetch the blob catalog from a remote node.
+    /// Fetches the blob catalog from a remote node.
     ///
     /// The remote node must have granted `BlobList` privilege to the local
     /// node's identity. Entries visible via ring membership are streamed back
@@ -176,7 +176,7 @@ pub enum Op {
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
     },
-    /// Add `peer` to the peer store, optionally with a nickname.
+    /// Adds `peer` to the peer store, optionally with a nickname.
     ///
     /// Idempotent: if the peer is already in the store the nickname is updated.
     /// `peer` is a base32-encoded [`EndpointId`].
@@ -191,9 +191,9 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         nickname: Option<String>,
     },
-    /// List all peers in the local peer store with their nicknames.
+    /// Lists all peers in the local peer store with their nicknames.
     PeerList,
-    /// Remove a peer from the local peer store and from all rings.
+    /// Removes a peer from the local peer store and from all rings.
     ///
     /// Errors if the peer is not in the store. `peer` is a base32-encoded
     /// [`EndpointId`].
@@ -205,7 +205,7 @@ pub enum Op {
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
     },
-    /// Gracefully stop the daemon after draining in-flight requests.
+    /// Gracefully stops the daemon after draining in-flight requests.
     Shutdown,
 }
 
@@ -249,7 +249,7 @@ pub enum EventKind {
 }
 
 impl Event {
-    /// Construct a [`EventKind::Line`] event carrying a text message.
+    /// Constructs a [`EventKind::Line`] event carrying a text message.
     pub fn line(req_id: Uuid, text: impl Into<String>) -> Self {
         Self {
             req_id,
@@ -257,12 +257,12 @@ impl Event {
         }
     }
 
-    /// Construct a blank [`EventKind::Line`] event — renders as an empty line in the console.
+    /// Constructs a blank [`EventKind::Line`] event — renders as an empty line in the console.
     pub fn blank(req_id: Uuid) -> Self {
         Self::line(req_id, "")
     }
 
-    /// Construct a [`EventKind::Progress`] event with byte counts.
+    /// Constructs a [`EventKind::Progress`] event with byte counts.
     pub fn progress(req_id: Uuid, done: u64, total: u64) -> Self {
         Self {
             req_id,
@@ -270,7 +270,7 @@ impl Event {
         }
     }
 
-    /// Construct a [`EventKind::Done`] event signalling successful completion.
+    /// Constructs a [`EventKind::Done`] event signalling successful completion.
     pub fn done(req_id: Uuid) -> Self {
         Self {
             req_id,
@@ -278,7 +278,7 @@ impl Event {
         }
     }
 
-    /// Construct an [`EventKind::Error`] event carrying a human-readable message.
+    /// Constructs an [`EventKind::Error`] event carrying a human-readable message.
     pub fn error(req_id: Uuid, message: impl Into<String>) -> Self {
         Self {
             req_id,

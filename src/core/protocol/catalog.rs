@@ -89,7 +89,7 @@ impl<R> fmt::Debug for CatalogHandler<R> {
 }
 
 impl<R: Registry + Clone + Send + Sync + 'static> CatalogHandler<R> {
-    /// Create a new handler backed by the given store, registry, grant store, and endpoint.
+    /// Creates a new handler backed by the given store, registry, grant store, and endpoint.
     pub(crate) fn new(store: FsStore, registry: R, grants: GrantStore, endpoint: Endpoint) -> Self {
         CatalogHandler {
             store,
@@ -175,7 +175,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> ProtocolHandler for CatalogHan
     }
 }
 
-/// Decode [`BLOB_LIST`] entries streamed by the server after the ALLOWED byte.
+/// Decodes [`BLOB_LIST`] entries streamed by the server after the ALLOWED byte.
 ///
 /// Reads until the remote sender closes the stream, returning all decoded entries.
 ///

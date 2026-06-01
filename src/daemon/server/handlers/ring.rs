@@ -38,7 +38,7 @@ pub(crate) fn ring_list_lines(registry: &impl Registry) -> Result<Vec<String>> {
     Ok(out)
 }
 
-/// Add `peer` to `ring` and ensure the peer exists in the peer store.
+/// Adds `peer` to `ring` and ensures the peer exists in the peer store.
 ///
 /// Nicknames are managed independently via [`Op::PeerNick`] / [`Op::PeerAdd`].
 /// The iroh-rings registry is always called with `label: None`.
