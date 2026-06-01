@@ -99,7 +99,7 @@ fn peer_ring_set<R: Registry>(registry: &R, peer: &str) -> Result<HashSet<String
 }
 
 impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
-    /// Start a node, binding a QUIC endpoint and loading the blob store from `data_dir`.
+    /// Starts a node, binding a QUIC endpoint and loading the blob store from `data_dir`.
     ///
     /// The node is immediately reachable for inbound connections once this
     /// returns. The blob store is created under `data_dir/blobs/` if it does
@@ -192,7 +192,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         self.endpoint.addr()
     }
 
-    /// Import a single file into the blob store.
+    /// Imports a single file into the blob store.
     ///
     /// The file is chunked, BLAKE3-hashed, and pinned with a named tag (the
     /// leaf filename, i.e. `path.file_name()`). Returns the root hash and `BlobFormat::Raw`.
@@ -228,7 +228,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok((hash, format))
     }
 
-    /// Import a directory into the blob store as an iroh-blobs collection.
+    /// Imports a directory into the blob store as an iroh-blobs collection.
     ///
     /// Each file under `dir` is imported individually; the resulting hashes are
     /// assembled into a `HashSeq` collection pinned under the directory name.
@@ -344,7 +344,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         Ok(blobs)
     }
 
-    /// Remove a blob from the local store by deleting its named tags.
+    /// Removes a blob from the local store by deleting its named tags.
     ///
     /// Ring tags in the registry must be removed separately by the caller
     /// before invoking this method. Disk space is reclaimed on the next GC
@@ -419,7 +419,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         decode_entries(&mut recv).await
     }
 
-    /// Import a file or directory, dispatching to [`Node::import_file`] or
+    /// Imports a file or directory, dispatching to [`Node::import_file`] or
     /// [`Node::import_directory`] based on whether `path` is a file or a dir.
     ///
     /// # Errors

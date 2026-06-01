@@ -43,7 +43,7 @@ impl Config {
         self.secret_key.public()
     }
 
-    /// Load configuration from `data_dir/config.json`, creating it with a fresh
+    /// Loads configuration from `data_dir/config.json`, creating it with a fresh
     /// secret key if the file does not yet exist.
     ///
     /// # Errors

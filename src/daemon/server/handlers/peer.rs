@@ -58,7 +58,7 @@ pub(crate) fn peer_list_lines(peer_store: &PeerStore) -> Result<Vec<String>> {
     Ok(out)
 }
 
-/// Remove a peer from the store, all rings, and all catalog grants.
+/// Removes a peer from the store, all rings, and all catalog grants.
 ///
 /// Errors if the peer is not in the store, consistent with how `ring remove`
 /// and `grant remove` behave.

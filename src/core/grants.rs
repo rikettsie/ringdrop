@@ -58,7 +58,7 @@ impl fmt::Display for Privilege {
 impl TryFrom<&str> for Privilege {
     type Error = anyhow::Error;
 
-    /// Parse a privilege from its canonical string representation.
+    /// Parses a privilege from its canonical string representation.
     ///
     /// # Errors
     ///
@@ -80,7 +80,7 @@ pub struct GrantStore {
 }
 
 impl GrantStore {
-    /// Open (or create) the grant store at `path`, backed by a dedicated database.
+    /// Opens (or creates) the grant store at `path`, backed by a dedicated database.
     ///
     /// Convenience wrapper around [`Self::from_db`] for standalone and test use.
     ///
@@ -93,7 +93,7 @@ impl GrantStore {
         Self::from_db(db)
     }
 
-    /// Attach the grant store to an existing shared database.
+    /// Attaches the grant store to an existing shared database.
     ///
     /// Creates the `GRANTS` table if it does not yet exist. Use this when
     /// `GrantStore` and `PeerStore` share the same `local.redb` file.
@@ -111,7 +111,7 @@ impl GrantStore {
         Ok(Self { db })
     }
 
-    /// Grant `privilege` to `peer`.
+    /// Grants `privilege` to `peer`.
     ///
     /// Idempotent: granting an already-granted privilege is a no-op.
     ///
@@ -131,7 +131,7 @@ impl GrantStore {
         Ok(())
     }
 
-    /// Revoke `privilege` from `peer`.
+    /// Revokes `privilege` from `peer`.
     ///
     /// Idempotent: revoking a non-existent grant is a no-op.
     ///
@@ -192,7 +192,7 @@ fn grant_key(privilege: Privilege, peer: &EndpointId) -> Vec<u8> {
     key
 }
 
-/// Decode a raw key back into `(Privilege, EndpointId)`.
+/// Decodes a raw key back into `(Privilege, EndpointId)`.
 fn decode_grant_key(key: &[u8]) -> Result<(Privilege, EndpointId)> {
     let sep = key
         .iter()

@@ -43,7 +43,7 @@ pub struct PeerStore {
 }
 
 impl PeerStore {
-    /// Open (or create) the peer store at `path`, backed by a dedicated database.
+    /// Opens (or creates) the peer store at `path`, backed by a dedicated database.
     ///
     /// Convenience wrapper around [`Self::from_db`] for standalone and test use.
     ///
@@ -56,7 +56,7 @@ impl PeerStore {
         Self::from_db(db)
     }
 
-    /// Attach the peer store to an existing shared database.
+    /// Attaches the peer store to an existing shared database.
     ///
     /// Creates the `PEERS` table if it does not yet exist. Use this when
     /// `PeerStore` and `GrantStore` share the same `local.redb` file.
@@ -74,7 +74,7 @@ impl PeerStore {
         Ok(Self { db })
     }
 
-    /// Add `peer` to the store with an optional nickname, or update the
+    /// Adds `peer` to the store with an optional nickname, or updates the
     /// nickname if the peer is already known.
     ///
     /// Passing `nickname: None` clears any existing nickname.
@@ -94,7 +94,7 @@ impl PeerStore {
         Ok(())
     }
 
-    /// Ensure `peer` is in the store.
+    /// Ensures `peer` is in the store.
     ///
     /// If the peer is already present the existing nickname is preserved. If
     /// absent the peer is added with no nickname.
@@ -117,7 +117,7 @@ impl PeerStore {
         self.upsert(peer, None)
     }
 
-    /// Set or update the nickname for an already-known peer.
+    /// Sets or updates the nickname for an already-known peer.
     ///
     /// # Errors
     ///
@@ -145,7 +145,7 @@ impl PeerStore {
         Ok(())
     }
 
-    /// Look up a peer by identity.
+    /// Looks up a peer by identity.
     ///
     /// Returns `None` if the peer is not in the store, `Some(None)` if the
     /// peer is known but has no nickname, and `Some(Some(nickname))` if a
@@ -196,7 +196,7 @@ impl PeerStore {
         Ok(out)
     }
 
-    /// Remove `peer` from the store.
+    /// Removes `peer` from the store.
     ///
     /// # Errors
     ///

@@ -92,7 +92,7 @@ struct Cli {
     command: Cmd,
 }
 
-/// Parse CLI arguments and dispatch the requested command to the daemon.
+/// Parses CLI arguments and dispatches the requested command to the daemon.
 ///
 /// # Errors
 ///

@@ -28,7 +28,7 @@ pub struct ShareTicket {
 }
 
 impl ShareTicket {
-    /// Create a ticket for a single raw blob (`BlobFormat::Raw`).
+    /// Creates a ticket for a single raw blob (`BlobFormat::Raw`).
     pub fn new(addr: EndpointAddr, hash: Hash, name: Option<String>) -> Self {
         ShareTicket {
             addr,
@@ -38,7 +38,7 @@ impl ShareTicket {
         }
     }
 
-    /// Create a ticket for a directory / collection (`BlobFormat::HashSeq`).
+    /// Creates a ticket for a directory / collection (`BlobFormat::HashSeq`).
     pub fn new_collection(addr: EndpointAddr, hash: Hash, name: Option<String>) -> Self {
         ShareTicket {
             addr,
@@ -48,7 +48,7 @@ impl ShareTicket {
         }
     }
 
-    /// Create a ticket with an explicit `format`.
+    /// Creates a ticket with an explicit `format`.
     pub fn from_format(
         addr: EndpointAddr,
         hash: Hash,
@@ -85,7 +85,7 @@ impl ShareTicket {
         self.addr.id
     }
 
-    /// Encode the ticket as a `rdrop://` URI.
+    /// Encodes the ticket as a `rdrop://` URI.
     ///
     /// The URI is base32-encoded JSON and can be decoded with [`ShareTicket::from_uri`].
     ///
@@ -104,7 +104,7 @@ impl ShareTicket {
         Ok(format!("rdrop://{encoded}"))
     }
 
-    /// Decode a `rdrop://` URI produced by [`ShareTicket::to_uri`].
+    /// Decodes a `rdrop://` URI produced by [`ShareTicket::to_uri`].
     ///
     /// # Errors
     ///

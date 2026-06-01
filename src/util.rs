@@ -16,7 +16,7 @@ pub fn default_data_dir() -> PathBuf {
         .join(".ringdrop")
 }
 
-/// Parse an [`EndpointId`] from its base32 string representation.
+/// Parses an [`EndpointId`] from its base32 string representation.
 ///
 /// # Errors
 ///
@@ -28,7 +28,7 @@ pub fn parse_peer_id(s: &str) -> Result<EndpointId> {
         .map_err(|e| anyhow::anyhow!("invalid peer id: {e}"))
 }
 
-/// Strip direct IP addresses from an endpoint address, keeping only relay URLs and the node ID.
+/// Strips direct IP addresses from an endpoint address, keeping only relay URLs and the node ID.
 ///
 /// Tickets and catalog entries use relay-only addresses so they remain valid
 /// across daemon restarts and IP changes. iroh still negotiates a direct
@@ -41,7 +41,7 @@ pub(crate) fn relay_only_addr(full: EndpointAddr) -> EndpointAddr {
         })
 }
 
-/// Format a peer ID with an optional nickname into a display string.
+/// Formats a peer ID with an optional nickname into a display string.
 ///
 /// Returns `"peer_id  (nickname)"` when a nickname is provided, or the peer ID
 /// alone when `nick` is `None`.
@@ -52,7 +52,7 @@ pub(crate) fn format_peer_entry(peer: &EndpointId, nick: Option<&str>) -> String
     }
 }
 
-/// Format a peer for display, resolving its nickname from the peer store.
+/// Formats a peer for display, resolving its nickname from the peer store.
 ///
 /// Delegates to [`format_peer_entry`] after looking up the nickname. Silently
 /// falls back to the raw ID on store read errors.
@@ -61,7 +61,7 @@ pub(crate) fn display_peer(peer: &EndpointId, store: &PeerStore) -> String {
     format_peer_entry(peer, nick.as_deref())
 }
 
-/// Parse a BLAKE3 [`Hash`] from its hex string representation.
+/// Parses a BLAKE3 [`Hash`] from its hex string representation.
 ///
 /// # Errors
 ///
