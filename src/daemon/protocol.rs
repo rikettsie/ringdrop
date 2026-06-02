@@ -246,6 +246,15 @@ pub enum EventKind {
         /// Human-readable description of the failure.
         message: String,
     },
+    /// Structured data record for machine consumers (e.g. a GUI).
+    ///
+    /// Emitted alongside or instead of `Line` events by ops that return lists.
+    /// The CLI ignores this variant; the GUI uses it exclusively.
+    Record {
+        /// JSON-encoded payload. The shape depends on the originating `Op` —
+        /// see each handler's documentation for the field names.
+        value: serde_json::Value,
+    },
 }
 
 impl Event {
@@ -285,6 +294,14 @@ impl Event {
             kind: EventKind::Error {
                 message: message.into(),
             },
+        }
+    }
+
+    /// Constructs an [`EventKind::Record`] event carrying a structured JSON value.
+    pub fn record(req_id: Uuid, value: serde_json::Value) -> Self {
+        Self {
+            req_id,
+            kind: EventKind::Record { value },
         }
     }
 }
@@ -620,5 +637,30 @@ mod tests {
                 nickname: None,
             }
         );
+    }
+
+    #[test]
+    fn event_record_serializes_correctly() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let value = serde_json::json!({"hash": "abc123", "name": "file.txt"});
+        let event = Event::record(id, value);
+        let json = serde_json::to_string(&event).unwrap();
+        // Must carry the "type":"record" tag and the value fields.
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["type"], "record");
+        assert_eq!(parsed["value"]["hash"], "abc123");
+        assert_eq!(parsed["value"]["name"], "file.txt");
+        assert_eq!(parsed["req_id"], "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn event_record_round_trips_through_json() {
+        let original = Event::record(
+            Uuid::new_v4(),
+            serde_json::json!({"peer_id": "deadbeef", "rings": ["friends", "work"]}),
+        );
+        let parsed: Event =
+            serde_json::from_str(&serde_json::to_string(&original).unwrap()).unwrap();
+        assert_eq!(parsed, original);
     }
 }

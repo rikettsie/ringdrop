@@ -53,9 +53,40 @@ pub(crate) async fn handle_grants<R: Registry + Clone + Send + Sync + 'static>(
     peer: Option<String>,
     privilege: Option<String>,
 ) -> Result<()> {
+    let peer_id_filter = peer
+        .as_deref()
+        .map(crate::util::parse_peer_id)
+        .transpose()?;
+    let priv_filter = privilege
+        .as_deref()
+        .map(crate::core::grants::Privilege::try_from)
+        .transpose()?;
+
+    let matching: Vec<_> = node
+        .grants
+        .list()?
+        .into_iter()
+        .filter(|(priv_, peer)| {
+            peer_id_filter.is_none_or(|f| *peer == f) && priv_filter.is_none_or(|f| *priv_ == f)
+        })
+        .collect();
+
     let lines = filtered_grant_lines(&node.grants, peer.as_deref(), privilege.as_deref())?;
     for line in lines {
         send(tx, Event::line(req_id, line)).await;
+    }
+    for (priv_, peer_id) in &matching {
+        send(
+            tx,
+            Event::record(
+                req_id,
+                serde_json::json!({
+                    "privilege": priv_.as_str(),
+                    "peer_id": peer_id.to_string(),
+                }),
+            ),
+        )
+        .await;
     }
     send(tx, Event::done(req_id)).await;
     Ok(())

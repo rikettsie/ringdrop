@@ -75,7 +75,7 @@ pub(crate) async fn handle_import<R: Registry + Clone + Send + Sync + 'static>(
     }
 
     let display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-    let ticket = node.make_ticket(hash, format, display_name);
+    let ticket = node.make_ticket(hash, format, display_name.clone());
     let ticket_str = ticket.to_uri()?;
 
     send(tx, Event::blank(req_id)).await;
@@ -86,6 +86,24 @@ pub(crate) async fn handle_import<R: Registry + Clone + Send + Sync + 'static>(
     send(
         tx,
         Event::line(req_id, format!("  rdrop receive {ticket_str}")),
+    )
+    .await;
+    let format_str = if format == iroh_blobs::BlobFormat::HashSeq {
+        "hash_seq"
+    } else {
+        "raw"
+    };
+    send(
+        tx,
+        Event::record(
+            req_id,
+            serde_json::json!({
+                "hash": hash.to_string(),
+                "format": format_str,
+                "name": display_name.as_deref().unwrap_or(""),
+                "ticket": ticket_str,
+            }),
+        ),
     )
     .await;
     send(tx, Event::done(req_id)).await;
@@ -133,6 +151,20 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
                 .await;
             }
             send(tx, Event::line(req_id, format!("    ticket: {ticket_str}"))).await;
+            let ring_names: Vec<_> = rings.iter().map(|(r, _)| r.as_str().to_owned()).collect();
+            send(
+                tx,
+                Event::record(
+                    req_id,
+                    serde_json::json!({
+                        "hash": hash.to_string(),
+                        "name": name,
+                        "rings": ring_names,
+                        "ticket": ticket_str,
+                    }),
+                ),
+            )
+            .await;
         }
     }
     send(tx, Event::done(req_id)).await;
@@ -152,6 +184,11 @@ pub(crate) async fn handle_blob_remove<R: Registry + Clone + Send + Sync + 'stat
     send(
         tx,
         Event::line(req_id, "Disk space will be reclaimed on the next GC cycle."),
+    )
+    .await;
+    send(
+        tx,
+        Event::record(req_id, serde_json::json!({ "hash": hash.to_string() })),
     )
     .await;
     send(tx, Event::done(req_id)).await;

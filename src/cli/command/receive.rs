@@ -76,6 +76,7 @@ pub(crate) async fn run(
                     pb.finish_and_clear();
                     error_msg = Some(message);
                 }
+                EventKind::Record { .. } => {}
             },
         )
         .await?;

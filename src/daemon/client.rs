@@ -94,7 +94,7 @@ impl DaemonClient {
         self.send(op, |event| match event.kind {
             EventKind::Line { text } => println!("{text}"),
             EventKind::Error { message } => err = Some(message),
-            EventKind::Done | EventKind::Progress { .. } => {}
+            EventKind::Done | EventKind::Progress { .. } | EventKind::Record { .. } => {}
         })
         .await?;
         if let Some(msg) = err {

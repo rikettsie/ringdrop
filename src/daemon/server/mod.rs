@@ -221,8 +221,13 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
 ) -> Result<()> {
     match op {
         Op::NodeId => {
+            let peer_id = node.endpoint.id();
+            let _ = tx.send(Event::line(req_id, peer_id.to_string())).await;
             let _ = tx
-                .send(Event::line(req_id, node.endpoint.id().to_string()))
+                .send(Event::record(
+                    req_id,
+                    serde_json::json!({ "peer_id": peer_id.to_string() }),
+                ))
                 .await;
             let _ = tx.send(Event::done(req_id)).await;
         }
@@ -253,11 +258,25 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
         Op::RingNew { name } => {
             let lines = handlers::ring::ring_new_lines(&node.registry, &name)?;
             send_lines(tx, req_id, &lines).await;
+            let _ = tx
+                .send(Event::record(req_id, serde_json::json!({ "name": name })))
+                .await;
             let _ = tx.send(Event::done(req_id)).await;
         }
         Op::RingList => {
             let lines = handlers::ring::ring_list_lines(&node.registry)?;
             send_lines(tx, req_id, &lines).await;
+            for ring in node.registry.list_rings()? {
+                let _ = tx
+                    .send(Event::record(
+                        req_id,
+                        serde_json::json!({
+                            "name": ring.as_str(),
+                            "open": ring.is_open(),
+                        }),
+                    ))
+                    .await;
+            }
             let _ = tx.send(Event::done(req_id)).await;
         }
         Op::RingAdd { ring, peer } => {
@@ -279,16 +298,50 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
         Op::RingMembers { ring } => {
             let lines = handlers::ring::ring_members_lines(&node.registry, &node.peers, &ring)?;
             send_lines(tx, req_id, &lines).await;
+            if ring != iroh_rings::OPEN_RING_NAME {
+                for (peer_id, _label) in node.registry.list_ring_peers(&ring)? {
+                    let nickname = node.peers.get(&peer_id).ok().flatten().flatten();
+                    let _ = tx
+                        .send(Event::record(
+                            req_id,
+                            serde_json::json!({
+                                "peer_id": peer_id.to_string(),
+                                "nickname": nickname,
+                            }),
+                        ))
+                        .await;
+                }
+            }
             let _ = tx.send(Event::done(req_id)).await;
         }
         Op::PeerAdd { peer, nickname } => {
             let lines = handlers::peer::peer_add_lines(&node.peers, &peer, nickname.as_deref())?;
             send_lines(tx, req_id, &lines).await;
+            let _ = tx
+                .send(Event::record(
+                    req_id,
+                    serde_json::json!({
+                        "peer_id": peer,
+                        "nickname": nickname,
+                    }),
+                ))
+                .await;
             let _ = tx.send(Event::done(req_id)).await;
         }
         Op::PeerList => {
             let lines = handlers::peer::peer_list_lines(&node.peers)?;
             send_lines(tx, req_id, &lines).await;
+            for (peer_id, nick) in node.peers.list()? {
+                let _ = tx
+                    .send(Event::record(
+                        req_id,
+                        serde_json::json!({
+                            "peer_id": peer_id.to_string(),
+                            "nickname": nick,
+                        }),
+                    ))
+                    .await;
+            }
             let _ = tx.send(Event::done(req_id)).await;
         }
         Op::PeerRemove { peer } => {

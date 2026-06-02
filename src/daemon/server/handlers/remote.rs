@@ -44,6 +44,18 @@ pub(crate) async fn handle_remote_blob_list<R: Registry + Clone + Send + Sync + 
             )
             .await;
             send(tx, Event::line(req_id, format!("    ticket: {ticket_str}"))).await;
+            send(
+                tx,
+                Event::record(
+                    req_id,
+                    serde_json::json!({
+                        "hash": entry.hash.to_string(),
+                        "name": entry.name,
+                        "ticket": ticket_str,
+                    }),
+                ),
+            )
+            .await;
         }
     }
     send(tx, Event::done(req_id)).await;
