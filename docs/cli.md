@@ -192,6 +192,36 @@ rdrop receive rdrop://ABCDEF... --dest ./downloads/file.txt
 
 ---
 
+## `rdrop info`
+
+Decode a ticket and display its fields without contacting the daemon or downloading anything.
+
+```sh
+rdrop info rdrop://ABCDEF...
+```
+
+Output:
+
+```
+hash     <blake3-hash>
+peer     <base32-peer-id>
+relays   https://iroh.custom.relay.example.com
+format   Raw
+name     summer-notes.txt
+```
+
+Fields:
+
+| Field | Description |
+|---|---|
+| `hash` | BLAKE3 content-addressed hash of the blob or collection root |
+| `peer` | Ed25519 public key of the sender (used to identify and authenticate the QUIC connection) |
+| `relays` | iroh relay servers the sender is reachable through; enables connection through NAT. `(none)` if absent |
+| `format` | `Raw` for a single file, `HashSeq` for a directory/collection |
+| `name` | Original filename or directory name used as the download destination; `(none)` if absent |
+
+---
+
 ## `rdrop grant`
 
 Grant specific rights to remote peers on your local node.

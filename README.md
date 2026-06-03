@@ -6,7 +6,7 @@
 [![docs.rs](https://docs.rs/ringdrop/badge.svg)](https://docs.rs/ringdrop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE-MIT)
 
-`rdrop` is a streamed P2P file transfer tool with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs) and [iroh-rings](https://github.com/rikettsie/iroh-rings).
+`ringdrop` is a streamed P2P file transfer tool with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs) and [iroh-rings](https://github.com/rikettsie/iroh-rings).
 
 To share a file, associate it with one or more rings and get back an `rdrop://` ticket to hand to peers.
 Only peers who are members of those rings can download it.

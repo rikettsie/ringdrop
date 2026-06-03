@@ -45,6 +45,9 @@
 //! # Receive — resumes automatically if interrupted
 //! rdrop receive rdrop://ABCDEF... [--dest ./downloads]
 //!
+//! # Inspect a ticket without downloading
+//! rdrop info rdrop://ABCDEF...
+//!
 //! # Manage catalog access grants
 //! rdrop grant add <peer-id> <privilege>           # e.g. blob-list
 //! rdrop grant remove <peer-id> <privilege>
@@ -155,6 +158,7 @@ pub async fn run() -> Result<()> {
         Cmd::Grant(cmd) => command::grant::run(cmd, &data_dir).await?,
         Cmd::Remote(cmd) => command::remote::run(cmd, &data_dir).await?,
         Cmd::Id => command::id::run(&data_dir).await?,
+        Cmd::Info { ticket } => command::info::run(&ticket)?,
     }
 
     Ok(())
