@@ -15,6 +15,7 @@ pub(super) mod blob;
 pub(super) mod daemon;
 pub(super) mod grant;
 pub(super) mod id;
+pub(super) mod info;
 pub(super) mod peer;
 pub(super) mod receive;
 pub(super) mod remote;
@@ -111,6 +112,13 @@ pub(super) enum Cmd {
 
     /// Print your peer-id (i.e. this node public-id) so others can add you to their rings
     Id,
+
+    /// Decode a ticket and display its fields (hash, peer, relays, format, name)
+    Info {
+        /// Ticket string (rdrop://...)
+        #[arg(value_name = "TICKET")]
+        ticket: String,
+    },
 }
 
 #[derive(Subcommand)]
