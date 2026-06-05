@@ -1,4 +1,4 @@
-# ringdrop
+<h1 align="center">Ringdrop</h1>
 
 [![Tests](https://github.com/rikettsie/ringdrop/actions/workflows/tests.yml/badge.svg)](https://github.com/rikettsie/ringdrop/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/rikettsie/ringdrop/graph/badge.svg)](https://codecov.io/gh/rikettsie/ringdrop)
@@ -6,7 +6,11 @@
 [![docs.rs](https://docs.rs/ringdrop/badge.svg)](https://docs.rs/ringdrop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE-MIT)
 
-`ringdrop` is a streamed P2P file transfer tool with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs) and [iroh-rings](https://github.com/rikettsie/iroh-rings).
+<img width="38%" align="right" src="https://raw.githubusercontent.com/rikettsie/ringdrop/main/docs/mascot.png">
+
+> **Ringdrop** is a streamed P2P file transfer tool,
+> with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs)
+> and [iroh-rings](https://github.com/rikettsie/iroh-rings).
 
 To share a file, associate it with one or more rings and get back an `rdrop://` ticket to hand to peers.
 Only peers who are members of those rings can download it.
