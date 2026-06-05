@@ -1,0 +1,21 @@
+name: Notify packaging
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version (strip leading v)
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Trigger ringdrop-packaging release
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PACKAGING_PAT }}
+          repository: rikettsie/ringdrop-packaging
+          event-type: ringdrop-release
+          client-payload: '{"version": "${{ steps.version.outputs.value }}"}'
