@@ -1,14 +1,18 @@
 <h1 align="center">Ringdrop</h1>
 
+<div align="center">
+
 [![Tests](https://github.com/rikettsie/ringdrop/actions/workflows/tests.yml/badge.svg)](https://github.com/rikettsie/ringdrop/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/rikettsie/ringdrop/graph/badge.svg)](https://codecov.io/gh/rikettsie/ringdrop)
 [![crates.io](https://img.shields.io/crates/v/ringdrop.svg)](https://crates.io/crates/ringdrop)
 [![docs.rs](https://docs.rs/ringdrop/badge.svg)](https://docs.rs/ringdrop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE-MIT)
 
+</div>
+
 <img width="38%" align="right" src="https://raw.githubusercontent.com/rikettsie/ringdrop/main/docs/mascot.png">
 
-> **Ringdrop** is a streamed P2P file transfer tool,
+> **Ringdrop** is a secure, frugal streamed P2P file transfer tool,
 > with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs)
 > and [iroh-rings](https://github.com/rikettsie/iroh-rings).
 
@@ -34,7 +38,9 @@ Access control is enforced at the connection level. Ring–resource associations
 | Windows (PowerShell) | `scoop bucket add rikettsie https://github.com/rikettsie/scoop-bucket; scoop install rdrop` |
 | All platforms (pre-built bin) | `cargo binstall ringdrop` |
 
-For prerequisites, alternative methods, and troubleshooting see [docs/install.md](docs/install.md).
+The crate is named `ringdrop`, but the binary is **`rdrop`** more succinct to type in the command line.
+
+For prerequisites, alternative install methods, and troubleshooting see [docs/install.md](docs/install.md).
 
 ## Commands
 
