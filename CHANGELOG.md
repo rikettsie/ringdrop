@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1] - 2026-06-05
+
+### Miscellaneous Tasks
+
+- Dispatch to ringdrop-packaging directly from publish job
+
 ## [0.13.0] - 2026-06-05
 
 ### Features
