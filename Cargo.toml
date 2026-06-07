@@ -3,7 +3,7 @@ resolver = "2"
 
 [package]
 name = "ringdrop"
-version = "0.13.1"
+version = "0.14.0"
 edition = "2021"
 authors = ["Enrico Fusto"]
 license = "MIT"
