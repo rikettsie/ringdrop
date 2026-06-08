@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.1] - 2026-06-08
+
+### Documentation
+
+- (**install**) Update install method for Fedora 42+
+
 ## [0.14.0] - 2026-06-07
 
 ### Refactoring
