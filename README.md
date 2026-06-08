@@ -10,7 +10,7 @@
 
 </div>
 
-<img width="38%" align="right" src="https://raw.githubusercontent.com/rikettsie/ringdrop/main/docs/mascot.png">
+<img width="35%" align="right" src="https://raw.githubusercontent.com/rikettsie/ringdrop/main/docs/mascot.png">
 
 > **Ringdrop** is a secure, frugal streamed P2P file transfer tool,
 > with *ring-based* access control, built on [iroh-blobs](https://github.com/n0-computer/iroh-blobs)
@@ -33,12 +33,13 @@ Access control is enforced at the connection level. Ring–resource associations
 
 | Platform | Quick command |
 |---|---|
-| Linux | `cargo install ringdrop` |
+| Fedora 42+ | `dnf copr enable rikettsie/ringdrop && dnf install ringdrop` |
+| Linux (all distributions) | `cargo install ringdrop` |
 | macOS | `brew tap rikettsie/tap && brew install rdrop` |
 | Windows (PowerShell) | `scoop bucket add rikettsie https://github.com/rikettsie/scoop-bucket; scoop install rdrop` |
 | All platforms (pre-built bin) | `cargo binstall ringdrop` |
 
-The crate is named `ringdrop`, but the binary is **`rdrop`** more succinct to type in the command line.
+The crate's name is `ringdrop`; the CLI binary is **`rdrop`**, more succinct to type in the command line.
 
 For prerequisites, alternative install methods, and troubleshooting see [docs/install.md](docs/install.md).
 

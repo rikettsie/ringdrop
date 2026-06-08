@@ -13,9 +13,26 @@ cargo binstall ringdrop
 
 ---
 
-## Linux
+## Fedora 42+
 
-### Via Cargo (recommended)
+### Via DNF COPR (recommended)
+
+```sh
+dnf copr enable rikettsie/ringdrop
+dnf install ringdrop
+```
+
+To upgrade later:
+
+```sh
+dnf upgrade ringdrop
+```
+
+---
+
+## Linux (all distributions)
+
+### Via Cargo
 
 Requires Rust. If you don't have it yet:
 
