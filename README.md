@@ -29,6 +29,22 @@ Access control is enforced at the connection level. Ring–resource associations
 - **Verified streaming** — every 16 KiB chunk is verified against the BLAKE3 hash tree before being written to disk
 - **Directory support** — import and share entire directories as a single ticket
 
+## Commands
+
+Here below the available CLI commands; full flag reference in [docs/cli.md](docs/cli.md).
+
+| Command | Description |
+|---|---|
+| `rdrop id` | Print your peer-id so others can add you to their rings |
+| `rdrop daemon` | Start, stop, and inspect the background daemon |
+| `rdrop ring` | Manage rings (create, list, add/remove peers, view members) |
+| `rdrop peer` | Manage the local peer address book with optional nicknames |
+| `rdrop import` | Import a file or directory and get a shareable ticket |
+| `rdrop blob` | Full blob lifecycle: import, list, remove, attach, detach |
+| `rdrop receive` | Download from a ticket (automatically resumes if interrupted) |
+| `rdrop grant` | Grant specific rights to remote peers on your local node |
+| `rdrop remote` | Perform a command in a remote node |
+
 ## Install
 
 | Platform | Quick command |
@@ -43,23 +59,9 @@ The crate's name is `ringdrop`; the CLI binary is **`rdrop`**, more succinct to 
 
 For prerequisites, alternative install methods, and troubleshooting see [docs/install.md](docs/install.md).
 
-## Commands
+## Desktop GUI
 
-Full reference: [docs/cli.md](docs/cli.md)
-
-| Command | Description |
-|---|---|
-| `rdrop id` | Print your peer-id so others can add you to their rings |
-| `rdrop daemon` | Start, stop, and inspect the background daemon |
-| `rdrop ring` | Manage rings (create, list, add/remove peers, view members) |
-| `rdrop peer` | Manage the local peer address book with optional nicknames |
-| `rdrop import` | Import a file or directory and get a shareable ticket |
-| `rdrop blob` | Full blob lifecycle: import, list, remove |
-| `rdrop tag` | Associate an already-imported blob with a ring (or mark it open) |
-| `rdrop untag` | Remove ring associations from a blob (revoke access) |
-| `rdrop receive` | Download from a ticket (automatically resumes if interrupted) |
-| `rdrop grant` | Grant specific rights to remote peers on your local node |
-| `rdrop remote` | Perform a command in a remote node |
+[ringdrop-gui](https://github.com/rikettsie/ringdrop-gui) is the native desktop app (based on tauri v2) connecting to the same daemon as the CLI — the `rdrop` CLI and the GUI are both IPC clients, fully interchangeable.
 
 ## Custom relay
 
