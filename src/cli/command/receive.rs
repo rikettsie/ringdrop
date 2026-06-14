@@ -81,7 +81,7 @@ pub(crate) async fn run(
                 } => {
                     let is_new_file = current_file
                         .as_ref()
-                        .map_or(true, |(fi, _, _)| *fi != file_index);
+                        .is_none_or(|(fi, _, _)| *fi != file_index);
                     if is_new_file {
                         // Print a static completion line for the file that just finished.
                         if let Some((pfi, pft, pfname)) = current_file.take() {
