@@ -130,35 +130,69 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
         .await;
     } else {
         send(tx, Event::line(req_id, format!("{} blobs:", blobs.len()))).await;
-        for (hash, format, name) in blobs {
-            let rings = node.registry.list_resource_rings(*hash.as_bytes())?;
-            let ticket = node.make_ticket(hash, format, Some(name.clone()));
+        for entry in blobs {
+            let blob_rings = node.registry.list_resource_rings(*entry.hash.as_bytes())?;
+            let ticket = node.make_ticket(entry.hash, entry.format, Some(entry.name.clone()));
             let ticket_str = ticket.to_uri()?;
+
+            let kind_str = match entry.format {
+                iroh_blobs::BlobFormat::HashSeq => {
+                    let count = entry
+                        .file_count
+                        .map(|n| format!("{n} files"))
+                        .unwrap_or_else(|| "dir".into());
+                    format!("dir, {count}")
+                }
+                _ => "file".into(),
+            };
+            let size_str = entry
+                .total_size
+                .map(format_size)
+                .unwrap_or_else(|| "?".into());
+
             send(tx, Event::blank(req_id)).await;
-            send(tx, Event::line(req_id, format!("  {hash}  ({name})"))).await;
-            if rings.is_empty() {
+            send(
+                tx,
+                Event::line(req_id, format!("  {}  ({})", entry.hash, entry.name)),
+            )
+            .await;
+            send(
+                tx,
+                Event::line(req_id, format!("    kind:   {kind_str}  ({size_str})")),
+            )
+            .await;
+            if blob_rings.is_empty() {
                 send(
                     tx,
-                    Event::line(req_id, "    no rings:  (inaccessible for all peers)"),
+                    Event::line(req_id, "    rings:  (none — inaccessible to all peers)"),
                 )
                 .await;
             } else {
-                let names: Vec<_> = rings.iter().map(|(r, _)| r.as_str().to_owned()).collect();
+                let names: Vec<_> =
+                    blob_rings.iter().map(|(r, _)| r.as_str().to_owned()).collect();
                 send(
                     tx,
                     Event::line(req_id, format!("    rings:  {}", names.join(", "))),
                 )
                 .await;
             }
-            send(tx, Event::line(req_id, format!("    ticket: {ticket_str}"))).await;
-            let ring_names: Vec<_> = rings.iter().map(|(r, _)| r.as_str().to_owned()).collect();
+            send(
+                tx,
+                Event::line(req_id, format!("    ticket: {ticket_str}")),
+            )
+            .await;
+            let ring_names: Vec<_> =
+                blob_rings.iter().map(|(r, _)| r.as_str().to_owned()).collect();
             send(
                 tx,
                 Event::record(
                     req_id,
                     serde_json::json!({
-                        "hash": hash.to_string(),
-                        "name": name,
+                        "hash": entry.hash.to_string(),
+                        "name": entry.name,
+                        "kind": kind_str,
+                        "file_count": entry.file_count,
+                        "size_bytes": entry.total_size,
                         "rings": ring_names,
                         "ticket": ticket_str,
                     }),
@@ -169,6 +203,21 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
     }
     send(tx, Event::done(req_id)).await;
     Ok(())
+}
+
+fn format_size(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    if bytes >= GIB {
+        format!("{:.1} GiB", bytes as f64 / GIB as f64)
+    } else if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
+    }
 }
 
 pub(crate) async fn handle_blob_remove<R: Registry + Clone + Send + Sync + 'static>(

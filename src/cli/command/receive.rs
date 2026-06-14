@@ -47,7 +47,7 @@ pub(crate) async fn run(
         ProgressStyle::default_bar()
             .template(
                 "{spinner:.green} [{elapsed_precise}] [{bar:40.green/yellow}] \
-                 {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+                 {bytes}/{total_bytes} ({bytes_per_sec}, {eta}){msg}",
             )
             .unwrap()
             .progress_chars("█▷ "),
@@ -66,6 +66,17 @@ pub(crate) async fn run(
                     pb.println(text);
                 }
                 EventKind::Progress { done, total } => {
+                    pb.set_length(total);
+                    pb.set_position(done);
+                }
+                EventKind::FileProgress {
+                    file_index,
+                    file_total,
+                    file_name,
+                    done,
+                    total,
+                } => {
+                    pb.set_message(format!(" [{file_index}/{file_total}] {file_name}"));
                     pb.set_length(total);
                     pb.set_position(done);
                 }

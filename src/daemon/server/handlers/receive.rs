@@ -5,7 +5,7 @@ use iroh_rings::Registry;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::core::{Node, ShareTicket};
+use crate::core::{Node, ProgressEvent, ShareTicket};
 use crate::daemon::protocol::Event;
 
 use super::send;
@@ -68,15 +68,29 @@ pub(crate) async fn handle_receive<R: Registry + Clone + Send + Sync + 'static>(
     // Progress events are emitted by a separate task so they don't block the
     // download future — `on_progress` is `Fn` (not async), so it can't await
     // the channel send directly.
-    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<(u64, u64)>();
-    let on_progress = move |done: u64, total: u64| {
-        let _ = progress_tx.send((done, total));
+    let (progress_tx, mut progress_rx) =
+        tokio::sync::mpsc::unbounded_channel::<ProgressEvent>();
+    let on_progress = move |ev: ProgressEvent| {
+        let _ = progress_tx.send(ev);
     };
 
     let event_tx = tx.clone();
     let progress_task = tokio::spawn(async move {
-        while let Some((done, total)) = progress_rx.recv().await {
-            let _ = event_tx.send(Event::progress(req_id, done, total)).await;
+        let mut current_file: Option<(usize, usize, String)> = None;
+        while let Some(ev) = progress_rx.recv().await {
+            match ev {
+                ProgressEvent::FileStart { index, total, name } => {
+                    current_file = Some((index, total, name));
+                }
+                ProgressEvent::Bytes { done, total } => {
+                    let ipc_ev = if let Some((fi, ft, ref fname)) = current_file {
+                        Event::file_progress(req_id, fi, ft, fname.clone(), done, total)
+                    } else {
+                        Event::progress(req_id, done, total)
+                    };
+                    let _ = event_tx.send(ipc_ev).await;
+                }
+            }
         }
     });
 

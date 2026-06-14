@@ -38,13 +38,29 @@ use super::peers::PeerStore;
 use super::protocol::catalog::{
     decode_entries, CatalogEntry, CatalogHandler, ALLOWED, BLOB_LIST, CATALOG_ALPN,
 };
-use super::protocol::{RingGate, RingReceiver};
+use super::protocol::{ProgressEvent, RingGate, RingReceiver};
 use super::ticket::ShareTicket;
 use crate::config::Config;
 use crate::local_store::LocalStore;
 use iroh_rings::{FsTransfer, Permission, Registry, OPEN_RING_NAME};
 
 use crate::util::parse_peer_id;
+
+/// Metadata about a locally stored blob, returned by [`Node::list_blobs`].
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct BlobListEntry {
+    /// Content-addressed BLAKE3 hash.
+    pub hash: Hash,
+    /// `Raw` for a single file, `HashSeq` for a directory/collection.
+    pub format: BlobFormat,
+    /// Tag name (usually the original filename or directory name).
+    pub name: String,
+    /// Number of files in the collection; `None` for raw blobs.
+    pub file_count: Option<usize>,
+    /// Total content size in bytes; `None` if the store does not yet have all chunks.
+    pub total_size: Option<u64>,
+}
 
 /// A ringdrop P2P node.
 ///
@@ -307,13 +323,13 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         &self,
         peer: Option<&str>,
         rings: Option<Vec<String>>,
-    ) -> Result<Vec<(Hash, BlobFormat, String)>> {
+    ) -> Result<Vec<BlobListEntry>> {
         let mut stream = self.store.tags().list().await?;
-        let mut blobs = Vec::new();
+        let mut raw: Vec<(Hash, BlobFormat, String)> = Vec::new();
         while let Some(item) = stream.next().await {
             let info = item?;
             let name = String::from_utf8_lossy(&info.name.0).into_owned();
-            blobs.push((info.hash, info.format, name));
+            raw.push((info.hash, info.format, name));
         }
 
         let peer_rings: Option<HashSet<String>> =
@@ -321,24 +337,62 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         let ring_names: Option<HashSet<String>> = rings.map(|rs| rs.into_iter().collect());
 
         if peer_rings.is_some() || ring_names.is_some() {
-            let mut filtered = Vec::with_capacity(blobs.len());
-            for (hash, format, name) in blobs {
-                let blob_rings = self.registry.list_resource_rings(*hash.as_bytes())?;
+            raw.retain(|(hash, _, _)| {
+                let blob_rings = self
+                    .registry
+                    .list_resource_rings(*hash.as_bytes())
+                    .unwrap_or_default();
                 if let Some(ref rset) = ring_names {
                     if !blob_rings.iter().any(|(r, _)| rset.contains(r.as_str())) {
-                        continue;
+                        return false;
                     }
                 }
                 if let Some(ref pset) = peer_rings {
                     if !blob_rings.iter().any(|(r, perms)| {
                         pset.contains(r.as_str()) && perms.contains(&Permission::Read)
                     }) {
-                        continue;
+                        return false;
                     }
                 }
-                filtered.push((hash, format, name));
-            }
-            blobs = filtered;
+                true
+            });
+        }
+
+        let mut blobs = Vec::with_capacity(raw.len());
+        for (hash, format, name) in raw {
+            let (file_count, total_size) = match format {
+                BlobFormat::Raw => {
+                    let size = match self.store.blobs().status(hash).await {
+                        Ok(BlobStatus::Complete { size }) => Some(size),
+                        _ => None,
+                    };
+                    (None, size)
+                }
+                BlobFormat::HashSeq => {
+                    match Collection::load(hash, &*self.store).await {
+                        Ok(collection) => {
+                            let file_count = collection.iter().count();
+                            let mut size_sum: u64 = 0;
+                            let mut all_complete = true;
+                            for (_, fhash) in collection.iter() {
+                                match self.store.blobs().status(*fhash).await {
+                                    Ok(BlobStatus::Complete { size }) => size_sum += size,
+                                    _ => {
+                                        all_complete = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            (
+                                Some(file_count),
+                                if all_complete { Some(size_sum) } else { None },
+                            )
+                        }
+                        Err(_) => (None, None),
+                    }
+                }
+            };
+            blobs.push(BlobListEntry { hash, format, name, file_count, total_size });
         }
 
         Ok(blobs)
@@ -444,16 +498,20 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
     /// Returns an error if the remote peer denies access, the connection
     /// cannot be established, or the export to disk fails.
     pub async fn download(&self, ticket: &ShareTicket, dest: impl AsRef<Path>) -> Result<()> {
-        self.download_impl(ticket, dest, |_, _| {}).await
+        self.download_impl(ticket, dest, |_| {}).await
     }
 
-    /// Like [`Node::download`], but calls `on_progress(bytes_done, total_bytes)`
+    /// Like [`Node::download`], but calls `on_progress` with a [`ProgressEvent`]
     /// as each chunk is received, suitable for driving a progress bar.
+    ///
+    /// For raw files, only [`ProgressEvent::Bytes`] events are emitted.
+    /// For directory blobs, a [`ProgressEvent::FileStart`] precedes each
+    /// member file's byte events.
     ///
     /// # Errors
     ///
     /// Returns an error under the same conditions as [`Node::download`].
-    pub async fn download_with_progress<F: Fn(u64, u64) + Send + Sync>(
+    pub async fn download_with_progress<F: Fn(ProgressEvent) + Send + Sync>(
         &self,
         ticket: &ShareTicket,
         dest: impl AsRef<Path>,
@@ -462,7 +520,7 @@ impl<R: Registry + Clone + Send + Sync + 'static> Node<R> {
         self.download_impl(ticket, dest, on_progress).await
     }
 
-    async fn download_impl<F: Fn(u64, u64) + Send + Sync>(
+    async fn download_impl<F: Fn(ProgressEvent) + Send + Sync>(
         &self,
         ticket: &ShareTicket,
         dest: impl AsRef<Path>,

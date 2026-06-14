@@ -16,7 +16,8 @@ mod protocol;
 mod ticket;
 
 pub use grants::{GrantStore, Privilege};
-pub use node::Node;
+pub use node::{BlobListEntry, Node};
 pub use peers::PeerStore;
 pub use protocol::catalog::CatalogEntry;
+pub use protocol::ProgressEvent;
 pub use ticket::ShareTicket;
