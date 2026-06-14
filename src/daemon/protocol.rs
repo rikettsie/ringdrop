@@ -239,6 +239,19 @@ pub enum EventKind {
         /// Total expected bytes.
         total: u64,
     },
+    /// Per-file progress during a directory blob (`HashSeq`) transfer.
+    FileProgress {
+        /// 1-based index of the current file in the collection.
+        file_index: usize,
+        /// Total number of files in the collection.
+        file_total: usize,
+        /// Relative path of the file within the collection.
+        file_name: String,
+        /// Bytes received so far for this file.
+        done: u64,
+        /// Total size of this file in bytes.
+        total: u64,
+    },
     /// Signal of request completed successfully; no further events will follow for this req_id.
     Done,
     /// Signal of request failed; no further events will follow for this req_id.
@@ -302,6 +315,27 @@ impl Event {
         Self {
             req_id,
             kind: EventKind::Record { value },
+        }
+    }
+
+    /// Constructs a [`EventKind::FileProgress`] event for a directory transfer.
+    pub fn file_progress(
+        req_id: Uuid,
+        file_index: usize,
+        file_total: usize,
+        file_name: impl Into<String>,
+        done: u64,
+        total: u64,
+    ) -> Self {
+        Self {
+            req_id,
+            kind: EventKind::FileProgress {
+                file_index,
+                file_total,
+                file_name: file_name.into(),
+                done,
+                total,
+            },
         }
     }
 }
@@ -402,6 +436,15 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Event::progress(id, 50, 100)).unwrap(),
             r#"{"req_id":"550e8400-e29b-41d4-a716-446655440000","type":"progress","done":50,"total":100}"#
+        );
+    }
+
+    #[test]
+    fn event_file_progress_serializes_correctly() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        assert_eq!(
+            serde_json::to_string(&Event::file_progress(id, 1, 3, "readme.txt", 50, 100)).unwrap(),
+            r#"{"req_id":"550e8400-e29b-41d4-a716-446655440000","type":"file_progress","file_index":1,"file_total":3,"file_name":"readme.txt","done":50,"total":100}"#
         );
     }
 

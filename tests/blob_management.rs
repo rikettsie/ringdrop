@@ -1,5 +1,6 @@
 mod common;
 
+use iroh_blobs::BlobFormat;
 use iroh_rings::{Permission, Registry, OPEN_RING_NAME};
 use tempfile::TempDir;
 
@@ -12,8 +13,8 @@ async fn import_file_preserves_filename_in_tag() {
     let (hash, _format) = node.node.import_file(&file).await.unwrap();
 
     let blobs = node.node.list_blobs(None, None).await.unwrap();
-    let (_, _, name) = blobs.into_iter().find(|(h, _, _)| *h == hash).unwrap();
-    assert_eq!(name, "report.pdf");
+    let entry = blobs.into_iter().find(|e| e.hash == hash).unwrap();
+    assert_eq!(entry.name, "report.pdf");
 
     node.shutdown().await;
 }
@@ -30,8 +31,8 @@ async fn import_directory_preserves_dir_name_in_tag() {
     let (hash, _format) = node.node.import_directory(&named_dir).await.unwrap();
 
     let blobs = node.node.list_blobs(None, None).await.unwrap();
-    let (_, _, name) = blobs.into_iter().find(|(h, _, _)| *h == hash).unwrap();
-    assert_eq!(name, "my_dataset");
+    let entry = blobs.into_iter().find(|e| e.hash == hash).unwrap();
+    assert_eq!(entry.name, "my_dataset");
 
     node.shutdown().await;
 }
@@ -59,16 +60,71 @@ async fn list_blobs_ticket_carries_original_filename() {
 
     let (hash, _format) = node.node.import_file(&file).await.unwrap();
 
-    let (_, fmt, name) = node
+    let entry = node
         .node
         .list_blobs(None, None)
         .await
         .unwrap()
         .into_iter()
-        .find(|(h, _, _)| *h == hash)
+        .find(|e| e.hash == hash)
         .unwrap();
-    let ticket = node.node.make_ticket(hash, fmt, Some(name));
+    let ticket = node.node.make_ticket(hash, entry.format, Some(entry.name));
     assert_eq!(ticket.name.as_deref(), Some("video.mp4"));
+
+    node.shutdown().await;
+}
+
+#[tokio::test]
+async fn blob_list_entry_for_file_shows_format_and_size() {
+    let node = common::TestNode::start().await;
+    let src = TempDir::new().unwrap();
+    let content = b"hello world";
+    let file = common::write_file(src.path(), "test.txt", content).await;
+
+    let (hash, _) = node.node.import_file(&file).await.unwrap();
+
+    let entry = node
+        .node
+        .list_blobs(None, None)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|e| e.hash == hash)
+        .unwrap();
+    assert_eq!(entry.format, BlobFormat::Raw);
+    assert_eq!(entry.file_count, None);
+    assert_eq!(entry.total_size, Some(content.len() as u64));
+
+    node.shutdown().await;
+}
+
+#[tokio::test]
+async fn blob_list_entry_for_directory_shows_file_count_and_total_size() {
+    let node = common::TestNode::start().await;
+    let src = TempDir::new().unwrap();
+    let dir = src.path().join("mydir");
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let content_a = b"aaa";
+    let content_b = b"bbbb";
+    common::write_file(&dir, "a.txt", content_a).await;
+    common::write_file(&dir, "b.txt", content_b).await;
+
+    let (hash, _) = node.node.import_directory(&dir).await.unwrap();
+
+    let entry = node
+        .node
+        .list_blobs(None, None)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|e| e.hash == hash)
+        .unwrap();
+    assert_eq!(entry.format, BlobFormat::HashSeq);
+    assert_eq!(entry.file_count, Some(2));
+    assert_eq!(
+        entry.total_size,
+        Some((content_a.len() + content_b.len()) as u64)
+    );
 
     node.shutdown().await;
 }

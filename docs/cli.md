@@ -120,7 +120,7 @@ Offer blob lifecycle management.
 | Command | Description |
 |---|---|
 | `rdrop blob import <filename>` | Import a file or directory |
-| `rdrop blob list` | List all local blobs with ring associations and tickets |
+| `rdrop blob list` | List all local blobs with kind, size and ring associations and tickets |
 | `rdrop blob remove <filename\|hash>` | Remove a blob and all its ring associations |
 | `rdrop blob attach <filename\|hash> <ring>...` | Attach a blob to one or more rings |
 | `rdrop blob detach <filename\|hash> <ring>...` | Detach a blob from one or more rings |

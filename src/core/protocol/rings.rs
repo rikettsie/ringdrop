@@ -27,6 +27,34 @@ use super::{encode_ranges_wire, encode_request, Status};
 // so the receiver knows the total before any leaf data arrives.
 const BAO_SIZE_HEADER: usize = size_of::<u64>();
 
+/// Progress event emitted by [`Node::download_with_progress`].
+///
+/// Raw-file downloads emit only [`ProgressEvent::Bytes`] events.
+/// Directory (`HashSeq`) downloads additionally emit a
+/// [`ProgressEvent::FileStart`] before each member file begins.
+///
+/// [`Node::download_with_progress`]: crate::core::Node::download_with_progress
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ProgressEvent {
+    /// A new file within a directory blob is about to be downloaded.
+    FileStart {
+        /// 1-based index of this file in the collection.
+        index: usize,
+        /// Total number of files in the collection.
+        total: usize,
+        /// Relative path of the file within the collection.
+        name: String,
+    },
+    /// Byte-level progress for the current blob (raw file or collection member).
+    Bytes {
+        /// Bytes received so far.
+        done: u64,
+        /// Total expected bytes.
+        total: u64,
+    },
+}
+
 pub(crate) struct RingReceiver {
     store: FsStore,
 }
@@ -39,10 +67,11 @@ impl RingReceiver {
     /// Download `hash` (and its members if it is a `HashSeq`) over `conn`,
     /// then export the result to `dest`.
     ///
-    /// `on_progress(bytes_done, total_bytes)` is called for each received leaf
-    /// chunk.  For `HashSeq` blobs progress is reported per member file only;
-    /// the tiny metadata root is downloaded silently.
-    pub(crate) async fn download<F: Fn(u64, u64) + Send + Sync>(
+    /// For raw blobs, `on_progress` receives [`ProgressEvent::Bytes`] for each
+    /// received chunk. For `HashSeq` collections it additionally receives a
+    /// [`ProgressEvent::FileStart`] before each member file begins; the tiny
+    /// metadata root is downloaded silently.
+    pub(crate) async fn download<F: Fn(ProgressEvent) + Send + Sync>(
         &self,
         conn: &Connection,
         hash: Hash,
@@ -64,7 +93,8 @@ impl RingReceiver {
             info!(hash = %hash, "root blob received");
         }
 
-        // For collections: fetch every member blob referenced by the HashSeq.
+        // For collections: load the meta blob first (needed by Collection::load),
+        // then fetch each named member file with per-file FileStart events.
         if format == BlobFormat::HashSeq {
             let root_bytes = self
                 .store
@@ -73,10 +103,26 @@ impl RingReceiver {
                 .await
                 .context("reading root HashSeq")?;
             let hash_seq = HashSeq::try_from(root_bytes).context("parsing HashSeq")?;
-            for item_hash in hash_seq {
+
+            let mut hs_iter = hash_seq.into_iter();
+            if let Some(meta_hash) = hs_iter.next() {
+                self.fetch_blob(conn, meta_hash, None::<Arc<F>>).await?;
+            }
+
+            let collection = Collection::load(hash, &*self.store)
+                .await
+                .context("loading collection")?;
+            let file_total = collection.iter().count();
+
+            for (file_idx, (file_name, item_hash)) in collection.iter().enumerate() {
                 info!(item_hash = %item_hash, "fetching collection item");
-                let op = Arc::clone(&on_progress);
-                self.fetch_blob(conn, item_hash, Some(op)).await?;
+                on_progress(ProgressEvent::FileStart {
+                    index: file_idx + 1,
+                    total: file_total,
+                    name: file_name.to_owned(),
+                });
+                self.fetch_blob(conn, *item_hash, Some(Arc::clone(&on_progress)))
+                    .await?;
             }
         }
 
@@ -88,7 +134,7 @@ impl RingReceiver {
     /// Skips silently if the blob is already complete in the local store.
     /// `on_progress` is `None` when the caller wants to suppress progress
     /// reporting (e.g. for the tiny HashSeq metadata root).
-    async fn fetch_blob<F: Fn(u64, u64) + Send + Sync>(
+    async fn fetch_blob<F: Fn(ProgressEvent) + Send + Sync>(
         &self,
         conn: &Connection,
         hash: Hash,
@@ -128,7 +174,10 @@ impl RingReceiver {
             .context("reading bao size header")?;
         let content_size = u64::from_le_bytes(size_buf);
         if let Some(ref p) = on_progress {
-            p(0, content_size);
+            p(ProgressEvent::Bytes {
+                done: 0,
+                total: content_size,
+            });
         }
 
         if let Some(size) = NonZeroU64::new(content_size) {
@@ -156,7 +205,10 @@ impl RingReceiver {
                             let item = item.map_err(io::Error::other)?;
                             if let BaoContentItem::Leaf(ref leaf) = item {
                                 if let Some(ref p) = on_progress {
-                                    p(leaf.offset + leaf.data.len() as u64, content_size);
+                                    p(ProgressEvent::Bytes {
+                                        done: leaf.offset + leaf.data.len() as u64,
+                                        total: content_size,
+                                    });
                                 }
                             }
                             tx.send(item).await.map_err(io::Error::from)?;
