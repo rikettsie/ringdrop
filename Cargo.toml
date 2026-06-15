@@ -23,11 +23,11 @@ name = "rdrop"
 path = "src/main.rs"
 
 [dependencies]
-iroh-rings = { version = "0.6.1", features = ["redb", "fs", "mem"] }
+iroh-rings = { version = "0.7.0", features = ["redb", "fs", "mem"] }
 
 # Core components: transport protocol, chunking, concurrency
-iroh = "0.98.2"
-iroh-blobs = { version = "0.100", features = ["fs-store"] }
+iroh = "1.0.0"
+iroh-blobs = { version = "0.103", features = ["fs-store"] }
 iroh-io = "0.6"
 bao-tree = "0.16"
 bytes = "1"
@@ -53,7 +53,7 @@ data-encoding = "2"           # base32 for human-friendly ticket display
 walkdir = "2"                 # directory traversal for multi-file send
 futures-lite = "2"
 dirs-next = "2"               # home directory for default data path
-indicatif = "0.17"            # terminal progress bars
+indicatif = "0.18"            # terminal progress bars
 serde_millis = "0.1.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
