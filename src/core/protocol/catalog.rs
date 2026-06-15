@@ -36,7 +36,9 @@ use iroh::{
     protocol::{AcceptError, ProtocolHandler},
     Endpoint, EndpointId,
 };
-use iroh_blobs::{store::fs::FsStore, BlobFormat, Hash};
+use iroh_blobs::{
+    api::blobs::BlobStatus, format::collection::Collection, store::fs::FsStore, BlobFormat, Hash,
+};
 use iroh_rings::{Permission, Registry};
 
 use crate::core::{GrantStore, Privilege, ShareTicket};
@@ -67,6 +69,10 @@ pub struct CatalogEntry {
     pub name: String,
     /// Transfer ticket that can be passed to the local node to download this blob.
     pub ticket: ShareTicket,
+    /// Number of files in the collection; `None` for raw blobs or when unavailable.
+    pub file_count: Option<usize>,
+    /// Total content size in bytes; `None` when the information is unavailable.
+    pub total_size: Option<u64>,
 }
 
 /// iroh [`ProtocolHandler`] for the catalog protocol.
@@ -152,7 +158,45 @@ impl<R: Registry + Clone + Send + Sync + 'static> CatalogHandler<R> {
             let ticket =
                 ShareTicket::from_format(addr.clone(), info.hash, info.format, Some(name.clone()));
             let ticket_uri = ticket.to_uri()?;
-            write_entry(send, info.hash, info.format, &name, &ticket_uri).await?;
+
+            let (file_count, total_size) = match info.format {
+                BlobFormat::Raw => {
+                    let size = match self.store.blobs().status(info.hash).await {
+                        Ok(BlobStatus::Complete { size }) => Some(size),
+                        _ => None,
+                    };
+                    (None, size)
+                }
+                BlobFormat::HashSeq => match Collection::load(info.hash, &*self.store).await {
+                    Ok(collection) => {
+                        let fc = collection.iter().count();
+                        let mut sum: u64 = 0;
+                        let mut complete = true;
+                        for (_, fhash) in collection.iter() {
+                            match self.store.blobs().status(*fhash).await {
+                                Ok(BlobStatus::Complete { size }) => sum += size,
+                                _ => {
+                                    complete = false;
+                                    break;
+                                }
+                            }
+                        }
+                        (Some(fc), if complete { Some(sum) } else { None })
+                    }
+                    Err(_) => (None, None),
+                },
+            };
+
+            write_entry(
+                send,
+                info.hash,
+                info.format,
+                &name,
+                &ticket_uri,
+                file_count,
+                total_size,
+            )
+            .await?;
         }
 
         send.finish()?;
@@ -219,11 +263,31 @@ pub(crate) async fn decode_entries(
         let ticket_uri = String::from_utf8(ticket_bytes).context("entry ticket is not UTF-8")?;
         let ticket = ShareTicket::from_uri(&ticket_uri)?;
 
+        let mut size_buf = [0u8; 8];
+        recv.read_exact(&mut size_buf)
+            .await
+            .context("reading total_size")?;
+        let total_size = match u64::from_le_bytes(size_buf) {
+            u64::MAX => None,
+            v => Some(v),
+        };
+
+        let mut count_buf = [0u8; 4];
+        recv.read_exact(&mut count_buf)
+            .await
+            .context("reading file_count")?;
+        let file_count = match u32::from_le_bytes(count_buf) {
+            u32::MAX => None,
+            v => Some(v as usize),
+        };
+
         entries.push(CatalogEntry {
             hash,
             format,
             name,
             ticket,
+            file_count,
+            total_size,
         });
     }
     Ok(entries)
@@ -235,6 +299,8 @@ async fn write_entry(
     format: BlobFormat,
     name: &str,
     ticket_uri: &str,
+    file_count: Option<usize>,
+    total_size: Option<u64>,
 ) -> Result<()> {
     send.write_all(hash.as_bytes())
         .await
@@ -252,6 +318,18 @@ async fn write_entry(
     write_length_prefixed(send, ticket_uri.as_bytes())
         .await
         .context("writing ticket")?;
+    // u64::MAX sentinel = unknown size; u32::MAX sentinel = not applicable / unknown count.
+    send.write_all(&total_size.unwrap_or(u64::MAX).to_le_bytes())
+        .await
+        .context("writing total_size")?;
+    send.write_all(
+        &file_count
+            .map(|c| c as u32)
+            .unwrap_or(u32::MAX)
+            .to_le_bytes(),
+    )
+    .await
+    .context("writing file_count")?;
     Ok(())
 }
 

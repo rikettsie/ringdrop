@@ -8,6 +8,8 @@ use uuid::Uuid;
 use crate::core::Node;
 use crate::daemon::protocol::Event;
 
+use crate::util::format_size;
+
 use super::{format_ring, resolve_target, send};
 
 pub(crate) async fn handle_import<R: Registry + Clone + Send + Sync + 'static>(
@@ -203,21 +205,6 @@ pub(crate) async fn handle_blob_list<R: Registry + Clone + Send + Sync + 'static
     }
     send(tx, Event::done(req_id)).await;
     Ok(())
-}
-
-fn format_size(bytes: u64) -> String {
-    const KIB: u64 = 1024;
-    const MIB: u64 = 1024 * KIB;
-    const GIB: u64 = 1024 * MIB;
-    if bytes >= GIB {
-        format!("{:.1} GiB", bytes as f64 / GIB as f64)
-    } else if bytes >= MIB {
-        format!("{:.1} MiB", bytes as f64 / MIB as f64)
-    } else if bytes >= KIB {
-        format!("{:.1} KiB", bytes as f64 / KIB as f64)
-    } else {
-        format!("{bytes} B")
-    }
 }
 
 pub(crate) async fn handle_blob_remove<R: Registry + Clone + Send + Sync + 'static>(

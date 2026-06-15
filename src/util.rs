@@ -61,6 +61,22 @@ pub(crate) fn display_peer(peer: &EndpointId, store: &PeerStore) -> String {
     format_peer_entry(peer, nick.as_deref())
 }
 
+/// Formats a byte count as a human-readable string (B / KiB / MiB / GiB).
+pub(crate) fn format_size(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    if bytes >= GIB {
+        format!("{:.1} GiB", bytes as f64 / GIB as f64)
+    } else if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
 /// Prints the ringdrop startup banner with version to stdout.
 ///
 /// The giraffe mascot is rendered in yellow on the left; the "ringdrop" text
