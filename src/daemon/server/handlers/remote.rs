@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::core::Node;
 use crate::daemon::protocol::Event;
-use crate::util::parse_peer_id;
+use crate::util::{format_size, parse_peer_id};
 
 use super::send;
 
@@ -37,10 +37,31 @@ pub(crate) async fn handle_remote_blob_list<R: Registry + Clone + Send + Sync + 
         send(tx, Event::line(req_id, format!("{} blobs:", entries.len()))).await;
         for entry in entries {
             let ticket_str = entry.ticket.to_uri()?;
+
+            let kind_str = match entry.format {
+                iroh_blobs::BlobFormat::HashSeq => {
+                    let count = entry
+                        .file_count
+                        .map(|n| format!("{n} files"))
+                        .unwrap_or_else(|| "dir".into());
+                    format!("dir, {count}")
+                }
+                _ => "file".into(),
+            };
+            let size_str = entry
+                .total_size
+                .map(format_size)
+                .unwrap_or_else(|| "?".into());
+
             send(tx, Event::blank(req_id)).await;
             send(
                 tx,
                 Event::line(req_id, format!("  {}  ({})", entry.hash, entry.name)),
+            )
+            .await;
+            send(
+                tx,
+                Event::line(req_id, format!("    kind:   {kind_str}  ({size_str})")),
             )
             .await;
             send(tx, Event::line(req_id, format!("    ticket: {ticket_str}"))).await;
@@ -51,6 +72,9 @@ pub(crate) async fn handle_remote_blob_list<R: Registry + Clone + Send + Sync + 
                     serde_json::json!({
                         "hash": entry.hash.to_string(),
                         "name": entry.name,
+                        "kind": kind_str,
+                        "file_count": entry.file_count,
+                        "size_bytes": entry.total_size,
                         "ticket": ticket_str,
                     }),
                 ),
