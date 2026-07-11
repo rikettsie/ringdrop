@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.1] - 2026-07-11
+
+### Miscellaneous Tasks
+
+- Make release publish job idempotent for reruns
+
 ## [0.18.0] - 2026-07-11
 
 ### Bug Fixes
