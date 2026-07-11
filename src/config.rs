@@ -57,6 +57,8 @@ impl Config {
                 .with_context(|| format!("reading {}", path.display()))?;
             serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))
         } else {
+            std::fs::create_dir_all(data_dir)
+                .with_context(|| format!("creating {}", data_dir.display()))?;
             let cfg = Config {
                 secret_key: SecretKey::generate(),
                 daemon_port: Self::default_daemon_port(),
@@ -84,6 +86,15 @@ mod tests {
         assert!(!dir.path().join("config.json").exists());
         Config::load_or_create(dir.path()).unwrap();
         assert!(dir.path().join("config.json").exists());
+    }
+
+    #[test]
+    fn creates_data_dir_when_it_does_not_exist() {
+        let dir = tmpdir();
+        let data_dir = dir.path().join("nested").join(".ringdrop");
+        assert!(!data_dir.exists());
+        Config::load_or_create(&data_dir).unwrap();
+        assert!(data_dir.join("config.json").exists());
     }
 
     #[test]
