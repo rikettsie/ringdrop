@@ -77,9 +77,16 @@ jobs:
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
-      - run: cargo publish --no-verify
+      - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if curl -sf "https://crates.io/api/v1/crates/ringdrop/${VERSION}" > /dev/null; then
+            echo "ringdrop ${VERSION} already published, skipping"
+          else
+            cargo publish --no-verify
+          fi
 
       - uses: actions/download-artifact@v4
         with:
@@ -95,11 +102,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
-            --notes-file RELEASE_NOTES.md \
-            --latest \
-            artifacts/*
+          if gh release view "${{ github.ref_name }}" &>/dev/null; then
+            echo "release ${{ github.ref_name }} already exists, skipping"
+          else
+            gh release create "${{ github.ref_name }}" \
+              --title "${{ github.ref_name }}" \
+              --notes-file RELEASE_NOTES.md \
+              --latest \
+              artifacts/*
+          fi
 
       - name: Extract version
         id: ver
@@ -123,11 +134,15 @@ jobs:
           cd homebrew-tap
           sed -i "s|url \".*\"|url \"https://github.com/rikettsie/ringdrop/archive/refs/tags/${TAG}.tar.gz\"|" Formula/rdrop.rb
           sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/rdrop.rb
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/rdrop.rb
-          git commit -m "chore: bump rdrop to ${TAG}"
-          git push
+          if git diff --quiet; then
+            echo "Homebrew formula already up to date, skipping commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Formula/rdrop.rb
+            git commit -m "chore: bump rdrop to ${TAG}"
+            git push
+          fi
 
       - name: Update Scoop manifest
         env:
@@ -143,8 +158,12 @@ jobs:
              --arg url "https://github.com/rikettsie/ringdrop/releases/download/${TAG}/rdrop-${VERSION}-x86_64-pc-windows-msvc.zip" \
              '.version = $version | .architecture."64bit".hash = $hash | .architecture."64bit".url = $url' \
              bucket/rdrop.json > tmp.json && mv tmp.json bucket/rdrop.json
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bucket/rdrop.json
-          git commit -m "chore: bump rdrop to ${TAG}"
-          git push
+          if git diff --quiet; then
+            echo "Scoop manifest already up to date, skipping commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add bucket/rdrop.json
+            git commit -m "chore: bump rdrop to ${TAG}"
+            git push
+          fi
