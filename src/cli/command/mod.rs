@@ -76,8 +76,11 @@ pub(super) enum Cmd {
     Remote(RemoteCmd),
 
     /// Print your peer-id (i.e. this node public-id) so others can add you to their rings
-    Id,
-
+    Id {
+        /// Show the ASCII QR-code below the peer-id
+        #[arg(long)]
+        qr_code: bool,
+    },
     /// Decode a ticket and display its fields (hash, peer, relays, format, name)
     Info {
         /// Ticket string (rdrop://...)

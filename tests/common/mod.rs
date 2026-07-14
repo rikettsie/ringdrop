@@ -102,7 +102,7 @@ pub async fn daemon_contract(daemon: TestDaemon) {
     let mut lines: Vec<String> = Vec::new();
     daemon
         .client
-        .send(Op::NodeId, |event| {
+        .send(Op::NodeId { qr_code: false }, |event| {
             if let EventKind::Line { text } = event.kind {
                 lines.push(text);
             }

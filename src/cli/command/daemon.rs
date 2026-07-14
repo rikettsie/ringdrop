@@ -160,7 +160,7 @@ async fn query_node_info(client: &DaemonClient) -> Result<String> {
     let mut node_id = String::new();
     let mut err: Option<String> = None;
     client
-        .send(Op::NodeId, |event| match event.kind {
+        .send(Op::NodeId { qr_code: false }, |event| match event.kind {
             EventKind::Line { text } => node_id = text,
             EventKind::Error { message } => err = Some(message),
             _ => {}

@@ -14,6 +14,8 @@ Print this node's peer-id (its public key in base32). Share it with others so th
 rdrop id
 ```
 
+If you specify the `--qr-code` flag, an ASCII QR-code is generated and printed to your console, representing your peer-id.
+
 ---
 
 ## `rdrop daemon`

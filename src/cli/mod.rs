@@ -10,6 +10,7 @@
 //!
 //! # Print your peer-id so others can add you to their rings
 //! rdrop id
+//! rdrop id --qr-code                   # also shows an ASCII qr-code representing your peer-id
 //!
 //! # Manage rings
 //! rdrop ring new friends               # create a ring named "friends"
@@ -142,7 +143,7 @@ pub async fn run() -> Result<()> {
         }
         Cmd::Grant(cmd) => command::grant::run(cmd, &data_dir).await?,
         Cmd::Remote(cmd) => command::remote::run(cmd, &data_dir).await?,
-        Cmd::Id => command::id::run(&data_dir).await?,
+        Cmd::Id { qr_code } => command::id::run(qr_code, &data_dir).await?,
         Cmd::Info { ticket } => command::info::run(&ticket)?,
     }
 

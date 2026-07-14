@@ -32,7 +32,10 @@ pub enum Op {
     /// Returns this node's [`EndpointId`] as a hex string.
     ///
     /// [`EndpointId`]: iroh::EndpointId
-    NodeId,
+    NodeId {
+        /// Also render an ASCII QR-code of the peer-id, streamed as extra [`EventKind::Line`]s.
+        qr_code: bool,
+    },
     /// Imports a file or directory and tags it with the given rings.
     Import {
         /// Path to the file or directory to import.
@@ -347,8 +350,8 @@ mod tests {
     #[test]
     fn op_node_id_serializes_to_snake_case_tag() {
         assert_eq!(
-            serde_json::to_string(&Op::NodeId).unwrap(),
-            r#"{"op":"node_id"}"#
+            serde_json::to_string(&Op::NodeId { qr_code: false }).unwrap(),
+            r#"{"op":"node_id","qr_code":false}"#
         );
     }
 
@@ -393,20 +396,22 @@ mod tests {
 
     #[test]
     fn request_without_req_id_fails_to_deserialize() {
-        let result: Result<Request, _> = serde_json::from_str(r#"{"op":"node_id"}"#);
+        let result: Result<Request, _> =
+            serde_json::from_str(r#"{"op":"node_id","qr_code":false}"#);
         assert!(result.is_err());
     }
 
     #[test]
     fn request_with_empty_req_id_fails_to_deserialize() {
-        let result: Result<Request, _> = serde_json::from_str(r#"{"req_id":"","op":"node_id"}"#);
+        let result: Result<Request, _> =
+            serde_json::from_str(r#"{"req_id":"","op":"node_id","qr_code":false}"#);
         assert!(result.is_err());
     }
 
     #[test]
     fn request_with_malformed_req_id_fails_to_deserialize() {
         let result: Result<Request, _> =
-            serde_json::from_str(r#"{"req_id":"not-a-uuid","op":"node_id"}"#);
+            serde_json::from_str(r#"{"req_id":"not-a-uuid","op":"node_id","qr_code":false}"#);
         assert!(result.is_err());
     }
 

@@ -57,6 +57,7 @@ indicatif = "0.18"            # terminal progress bars
 serde_millis = "0.1.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+qrcode = { version = "0.14.1", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
