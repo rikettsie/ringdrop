@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0] - 2026-07-14
+
+### Documentation
+
+- (**CLI**) Add '--qr-code' flag to 'id' command
+
+### Features
+
+- (**CLI**) Add ASCII QR-code to id command with --qr-code flag
+
 ## [0.18.1] - 2026-07-11
 
 ### Miscellaneous Tasks
