@@ -26,13 +26,40 @@ async fn daemon_contract_holds_with_redb() {
 }
 
 #[tokio::test]
+async fn node_id_with_qr_code_emits_peer_id_then_qr_art_lines() {
+    let daemon = common::TestDaemon::start().await;
+
+    let mut lines: Vec<String> = Vec::new();
+    daemon
+        .client
+        .send(Op::NodeId { qr_code: true }, |event| {
+            if let EventKind::Line { text } = event.kind {
+                lines.push(text);
+            }
+        })
+        .await
+        .unwrap();
+
+    assert!(
+        lines.len() > 2,
+        "expected the peer-id line plus a blank line and QR art lines, got {lines:?}"
+    );
+    assert!(!lines[0].is_empty(), "first line must be the peer-id");
+    assert_eq!(lines[1], "", "second line must be a blank separator");
+    assert!(
+        lines[2..].iter().any(|l| !l.is_empty()),
+        "remaining lines must contain rendered QR art"
+    );
+}
+
+#[tokio::test]
 async fn ring_add_self_is_rejected_via_daemon() {
     let daemon = common::TestDaemon::start().await;
 
     let mut node_id = String::new();
     daemon
         .client
-        .send(Op::NodeId, |event| {
+        .send(Op::NodeId { qr_code: false }, |event| {
             if let EventKind::Line { text } = event.kind {
                 node_id = text;
             }
@@ -351,7 +378,7 @@ async fn grant_add_then_list_shows_the_grant() {
     let mut peer_id = String::new();
     daemon
         .client
-        .send(Op::NodeId, |event| {
+        .send(Op::NodeId { qr_code: false }, |event| {
             if let EventKind::Line { text } = event.kind {
                 peer_id = text;
             }
@@ -395,7 +422,7 @@ async fn grant_revoke_removes_grant_from_list() {
     let mut peer_id = String::new();
     daemon
         .client
-        .send(Op::NodeId, |event| {
+        .send(Op::NodeId { qr_code: false }, |event| {
             if let EventKind::Line { text } = event.kind {
                 peer_id = text;
             }

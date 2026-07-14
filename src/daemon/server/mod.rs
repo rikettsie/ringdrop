@@ -14,9 +14,11 @@ mod handlers;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_lite::StreamExt;
 use iroh_rings::Registry;
+use qrcode::render::unicode;
+use qrcode::QrCode;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Notify};
@@ -220,9 +222,17 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
     tx: &mpsc::Sender<Event>,
 ) -> Result<()> {
     match op {
-        Op::NodeId => {
+        Op::NodeId { qr_code } => {
             let peer_id = node.endpoint.id();
             let _ = tx.send(Event::line(req_id, peer_id.to_string())).await;
+            if qr_code {
+                let code = QrCode::new(peer_id.to_string())
+                    .context("failed to generate QR code for peer-id")?;
+                let art = code.render::<unicode::Dense1x2>().quiet_zone(true).build();
+                let lines: Vec<String> = art.lines().map(str::to_owned).collect();
+                let _ = tx.send(Event::blank(req_id)).await;
+                send_lines(tx, req_id, &lines).await;
+            }
             let _ = tx
                 .send(Event::record(
                     req_id,
