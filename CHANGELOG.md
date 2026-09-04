@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.2] - 2026-09-04
+
+### Refactoring
+
+- (**deps**) Bump iroh 1.1.0, iroh-rings 0.7.2 and related crates
+
 ## [0.19.1] - 2026-07-27
 
 ### Refactoring
