@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.3] - 2026-09-04
+
+### Bug Fixes
+
+- Replace chunks_exact with as_chunks to satisfy newer clippy
+
 ## [0.19.2] - 2026-09-04
 
 ### Refactoring
