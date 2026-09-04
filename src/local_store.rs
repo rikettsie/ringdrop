@@ -193,7 +193,8 @@ fn copy_ring_peers(dst: &Database, registry_path: &Path) -> Result<()> {
             if ring_name.value() == "open" {
                 continue;
             }
-            for chunk in members_bytes.value().chunks_exact(32) {
+            for chunk in members_bytes.value().as_chunks::<32>().0 {
+                let chunk = chunk.as_slice();
                 if peers_table
                     .get(chunk)
                     .context("querying peer in peers table")?
