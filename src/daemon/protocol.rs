@@ -119,7 +119,7 @@ pub enum Op {
         /// [`ShareTicket`]: crate::core::ShareTicket
         ticket: String,
         /// Filesystem path to write the received file or directory to.
-        dest: PathBuf,
+        dest: Option<PathBuf>,
         /// Overwrite an existing destination without prompting.
         force_overwrite: bool,
     },
