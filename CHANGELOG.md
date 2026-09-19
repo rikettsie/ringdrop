@@ -2,23 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0] - 2026-09-19
+
+### Bug Fixes
+
+- (**receive**) Ignore empty default_receive_dir and create missing dir
+
+### Documentation
+
+- Document default_receive_dir
+
+### Features
+
+- Add default_receive_dir in config
+
+### Refactoring
+
+- (**daemon**) Pass default_receive_dir instead of Config to server
+
 ## [0.19.3] - 2026-09-04
 
 ### Bug Fixes
 
 - Replace chunks_exact with as_chunks to satisfy newer clippy
-
-## [0.19.2] - 2026-09-04
-
-### Refactoring
-
-- (**deps**) Bump iroh 1.1.0, iroh-rings 0.7.2 and related crates
-
-## [0.19.1] - 2026-07-27
-
-### Refactoring
-
-- (**deps**) Bump iroh 1.0.3 and related crates
 
 ## [0.19.0] - 2026-07-14
 
