@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.1] - 2026-09-20
+
+### Refactoring
+
+- Bump v0.20.1
+
 ## [0.20.0] - 2026-09-19
 
 ### Bug Fixes
