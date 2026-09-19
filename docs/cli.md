@@ -153,7 +153,7 @@ rdrop receive rdrop://ABCDEF... --dest ./downloads
 rdrop receive rdrop://ABCDEF... --dest ./downloads/file.txt
 ```
 
-`--dest` can be a directory (file is placed inside it) or an explicit file path.
+`--dest` can be a directory (file is placed inside it) or an explicit file path. When `--dest` is not set it defaults to `default_receive_dir` from `config.json`. If `default_receive_dir` is not set this defaults to the current working directory.
 
 ---
 

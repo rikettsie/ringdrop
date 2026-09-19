@@ -59,8 +59,8 @@ pub(super) enum Cmd {
         ticket: String,
 
         /// Destination path (directory or file path)
-        #[arg(long, default_value = ".")]
-        dest: PathBuf,
+        #[arg(long)]
+        dest: Option<PathBuf>,
 
         /// Overwrite an existing destination without warning
         #[arg(long)]

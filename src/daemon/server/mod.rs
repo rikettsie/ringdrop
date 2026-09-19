@@ -27,6 +27,7 @@ use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 use tracing::{error, info};
 use uuid::Uuid;
 
+use crate::config::Config;
 use crate::core::Node;
 use crate::daemon::protocol::{Event, Op, Request};
 
@@ -42,6 +43,7 @@ use crate::daemon::protocol::{Event, Op, Request};
 /// [`Op::Shutdown`]: crate::daemon::protocol::Op::Shutdown
 pub struct DaemonServer<R> {
     node: Arc<Node<R>>,
+    config: Arc<Config>,
     listener: TcpListener,
     shutdown: Arc<Notify>,
 }
@@ -52,13 +54,14 @@ impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
     /// # Errors
     ///
     /// Returns an error if the port is already in use.
-    pub async fn bind(node: Node<R>, port: u16) -> Result<Self> {
+    pub async fn bind(node: Node<R>, config: Config, port: u16) -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
             .map_err(|e| anyhow::anyhow!("cannot bind to port {port}: {e}"))?;
         info!(port, "ringdrop daemon listening");
         Ok(Self {
             node: Arc::new(node),
+            config: Arc::new(config),
             listener,
             shutdown: Arc::new(Notify::new()),
         })
@@ -93,9 +96,10 @@ impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
                     let (stream, addr) = result?;
                     info!(%addr, "connection accepted");
                     let node = Arc::clone(&self.node);
+                    let config = Arc::clone(&self.config);
                     let shutdown = Arc::clone(&self.shutdown);
                     tasks.spawn(async move {
-                        if let Err(e) = handle_connection(stream, node, shutdown).await {
+                        if let Err(e) = handle_connection(stream, node, config, shutdown).await {
                             error!("connection error: {e:#}");
                         }
                     });
@@ -129,6 +133,7 @@ use super::MAX_LINE_BYTES;
 async fn handle_connection<R: Registry + Clone + Send + Sync + 'static>(
     stream: TcpStream,
     node: Arc<Node<R>>,
+    config: Arc<Config>,
     shutdown: Arc<Notify>,
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
@@ -166,7 +171,7 @@ async fn handle_connection<R: Registry + Clone + Send + Sync + 'static>(
     let req_id = req.req_id;
     let (tx, mut rx) = mpsc::channel::<Event>(32);
 
-    tokio::spawn(dispatch(req.op, req_id, node, tx, shutdown));
+    tokio::spawn(dispatch(req.op, req_id, node, config, tx, shutdown));
 
     while let Some(event) = rx.recv().await {
         if !emit(&mut writer, &event).await {
@@ -198,6 +203,7 @@ async fn dispatch<R: Registry + Clone + Send + Sync + 'static>(
     op: Op,
     req_id: Uuid,
     node: Arc<Node<R>>,
+    config: Arc<Config>,
     tx: mpsc::Sender<Event>,
     shutdown: Arc<Notify>,
 ) {
@@ -207,7 +213,7 @@ async fn dispatch<R: Registry + Clone + Send + Sync + 'static>(
         return;
     }
 
-    match handle_op(op, req_id, &node, &tx).await {
+    match handle_op(op, req_id, &node, &config, &tx).await {
         Ok(()) => {}
         Err(e) => {
             let _ = tx.send(Event::error(req_id, e.to_string())).await;
@@ -219,6 +225,7 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
     op: Op,
     req_id: Uuid,
     node: &Node<R>,
+    config: &Config,
     tx: &mpsc::Sender<Event>,
 ) -> Result<()> {
     match op {
@@ -369,8 +376,16 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
             dest,
             force_overwrite,
         } => {
-            handlers::receive::handle_receive(req_id, node, tx, ticket, dest, force_overwrite)
-                .await?;
+            handlers::receive::handle_receive(
+                req_id,
+                node,
+                tx,
+                ticket,
+                dest,
+                config.default_receive_dir.clone(),
+                force_overwrite,
+            )
+            .await?;
         }
         Op::Grant { peer, privilege } => {
             handlers::grant::handle_grant(req_id, node, tx, peer, privilege).await?;

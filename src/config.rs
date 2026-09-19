@@ -1,6 +1,6 @@
 //! Node configuration: identity key and daemon port.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use iroh::{EndpointId, RelayUrl, SecretKey};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// see and add to their rings.
 ///
 /// [`EndpointId`]: iroh::EndpointId
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Long-term Ed25519 secret key; determines the [`EndpointId`] peers add to their rings.
     ///
@@ -29,6 +29,10 @@ pub struct Config {
     /// An invalid URL is rejected at daemon start with a clear error.
     #[serde(default)]
     pub relay_url: Option<RelayUrl>,
+
+    /// Default receive directory if --dir is not set
+    #[serde(default)]
+    pub default_receive_dir: Option<PathBuf>,
 }
 
 impl Config {
@@ -63,6 +67,7 @@ impl Config {
                 secret_key: SecretKey::generate(),
                 daemon_port: Self::default_daemon_port(),
                 relay_url: None,
+                default_receive_dir: None,
             };
             let raw = serde_json::to_string_pretty(&cfg)?;
             std::fs::write(&path, raw).with_context(|| format!("writing {}", path.display()))?;
@@ -155,6 +160,26 @@ mod tests {
             cfg.relay_url.unwrap().to_string(),
             "https://relay.example.com/"
         );
+    }
+
+    #[test]
+    fn default_receive_dir_parses_correctly() {
+        let dir = tmpdir();
+        let key = iroh::SecretKey::generate();
+        let cfg_json = serde_json::json!({ "secret_key": key, "default_receive_dir": "." });
+        std::fs::write(dir.path().join("config.json"), cfg_json.to_string()).unwrap();
+        let cfg = Config::load_or_create(dir.path()).unwrap();
+        assert_eq!(cfg.default_receive_dir.unwrap(), PathBuf::from("."));
+    }
+
+    #[test]
+    fn default_receive_dir_defaults_to_none() {
+        let dir = tmpdir();
+        let key = iroh::SecretKey::generate();
+        let cfg_json = serde_json::json!({ "secret_key": key });
+        std::fs::write(dir.path().join("config.json"), cfg_json.to_string()).unwrap();
+        let cfg = Config::load_or_create(dir.path()).unwrap();
+        assert!(cfg.default_receive_dir.is_none());
     }
 
     #[test]
