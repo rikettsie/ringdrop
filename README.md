@@ -77,6 +77,18 @@ When the field is absent the default n0 relay is used. An invalid URL or an unre
 
 > **Self-hosting a relay**: see the [iroh-relay README](https://github.com/n0-computer/iroh/tree/main/iroh-relay) for instructions on running your own relay instance. Peer discovery (pkarr/DNS) continues to use n0's `iroh.link` infrastructure regardless of which relay you choose.
 
+## Default receive directory
+
+`rdrop receive` saves into the current directory unless you pass `--dest`. To always save somewhere else, add a `default_receive_dir` field to `config.json`:
+
+```json
+{
+  "default_receive_dir": "~/Downloads/ringdrop"
+}
+```
+
+`--dest` always takes precedence. A leading `~` is expanded, the directory is created if it does not exist, and an empty value is treated as unset. The setting is read when the daemon starts, so restart it (`rdrop daemon stop` then `rdrop daemon start`) after editing `config.json`. The GUI honors it too, since the daemon resolves the directory.
+
 ## Contributing
 
 If you have ideas/contributions or anything is not working the way you expect (in which case, please include an output with `RUST_LOG=debug`) and feel free to open an issue or PR.
