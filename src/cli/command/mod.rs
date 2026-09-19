@@ -58,8 +58,9 @@ pub(super) enum Cmd {
         /// Ticket string (rdrop://...)
         ticket: String,
 
-        /// Destination path (directory or file path)
-        #[arg(long)]
+        /// Destination path (directory or file path); defaults to `default_receive_dir`
+        /// from config.json, then to the current directory
+        #[arg(long, value_parser = receive::parse_dest)]
         dest: Option<PathBuf>,
 
         /// Overwrite an existing destination without warning

@@ -6,6 +6,16 @@ use indicatif::{ProgressBar, ProgressStyle};
 use crate::core::ShareTicket;
 use crate::daemon::protocol::{EventKind, Op};
 
+/// clap value parser for `--dest`: rejects an empty path, which would
+/// otherwise be silently treated as "no destination".
+pub(super) fn parse_dest(raw: &str) -> Result<PathBuf, String> {
+    if raw.is_empty() {
+        Err("must not be empty".to_owned())
+    } else {
+        Ok(PathBuf::from(raw))
+    }
+}
+
 pub(crate) async fn run(
     ticket_str: &str,
     dest: Option<PathBuf>,
@@ -89,4 +99,19 @@ pub(crate) async fn run(
         std::process::exit(1);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_dest_rejects_empty_path() {
+        assert!(parse_dest("").is_err());
+    }
+
+    #[test]
+    fn parse_dest_accepts_non_empty_path() {
+        assert_eq!(parse_dest("./downloads"), Ok(PathBuf::from("./downloads")));
+    }
 }

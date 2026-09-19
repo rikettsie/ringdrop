@@ -129,9 +129,13 @@ pub(crate) async fn run_serve(data_dir: &Path) -> Result<()> {
     );
     let registry =
         RedbRegistry::open(data_dir.join("registry.redb")).context("opening registry")?;
-    let node = Node::start(data_dir, cfg.clone(), registry).await?;
+    let default_receive_dir = cfg.default_receive_dir.clone();
+    let node = Node::start(data_dir, cfg, registry).await?;
 
-    DaemonServer::bind(node, cfg, port).await?.run().await
+    DaemonServer::bind(node, default_receive_dir, port)
+        .await?
+        .run()
+        .await
 }
 
 /// Returns a human-readable relay label for display in `daemon start` and `daemon status`.

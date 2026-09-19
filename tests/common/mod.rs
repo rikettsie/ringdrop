@@ -22,7 +22,7 @@ impl TestNode {
         let dir = TempDir::new().expect("tempdir");
         let cfg = Config::load_or_create(dir.path()).expect("config");
         let registry = RedbRegistry::open(dir.path().join("registry.redb")).expect("registry");
-        let node = Node::start(dir.path(), cfg.clone(), registry)
+        let node = Node::start(dir.path(), cfg, registry)
             .await
             .expect("node start");
         TestNode { node, _dir: dir }
@@ -46,10 +46,10 @@ impl TestDaemon {
         let dir = TempDir::new().expect("tempdir");
         let cfg = Config::load_or_create(dir.path()).expect("config");
         let registry = RedbRegistry::open(dir.path().join("registry.redb")).expect("registry");
-        let node = Node::start(dir.path(), cfg.clone(), registry)
+        let node = Node::start(dir.path(), cfg, registry)
             .await
             .expect("node start");
-        let server = DaemonServer::bind(node, cfg, 0).await.expect("bind");
+        let server = DaemonServer::bind(node, None, 0).await.expect("bind");
         let port = server.local_port();
         let handle = tokio::spawn(async move { server.run().await.expect("daemon server run") });
         TestDaemon {
@@ -66,10 +66,10 @@ impl TestDaemon {
         let dir = TempDir::new().expect("tempdir");
         let cfg = Config::load_or_create(dir.path()).expect("config");
         let registry = InMemoryRegistry::new();
-        let node = Node::start(dir.path(), cfg.clone(), registry)
+        let node = Node::start(dir.path(), cfg, registry)
             .await
             .expect("node start");
-        let server = DaemonServer::bind(node, cfg, 0).await.expect("bind");
+        let server = DaemonServer::bind(node, None, 0).await.expect("bind");
         let port = server.local_port();
         let handle = tokio::spawn(async move { server.run().await.expect("daemon server run") });
         TestDaemon {

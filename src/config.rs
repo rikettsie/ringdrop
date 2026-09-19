@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// see and add to their rings.
 ///
 /// [`EndpointId`]: iroh::EndpointId
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     /// Long-term Ed25519 secret key; determines the [`EndpointId`] peers add to their rings.
     ///
@@ -29,8 +29,11 @@ pub struct Config {
     /// An invalid URL is rejected at daemon start with a clear error.
     #[serde(default)]
     pub relay_url: Option<RelayUrl>,
-
-    /// Default receive directory if --dir is not set
+    /// Directory `rdrop receive` saves into when `--dest` is not set.
+    ///
+    /// A leading `~` is expanded to the home directory. An empty value is treated as
+    /// unset (the current directory is used). The directory is created if missing.
+    /// Read once at daemon start, so changes need a daemon restart.
     #[serde(default)]
     pub default_receive_dir: Option<PathBuf>,
 }

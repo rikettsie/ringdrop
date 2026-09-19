@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use iroh_rings::Registry;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -17,15 +17,33 @@ fn expand_tilde(path: &Path, home: Option<&Path>) -> PathBuf {
     }
 }
 
-// If --dir is None, default_receive_dir from config.json is chosen
-// If default_receive_dir is None then current directory is chosen
+/// Where a received blob is written, and how the path is to be interpreted.
+#[derive(Debug, PartialEq)]
+enum ResolvedDest {
+    /// Given by `--dest`: an existing directory (the blob is placed inside it)
+    /// or an explicit file path.
+    Explicit(PathBuf),
+    /// From `default_receive_dir` or the current directory: always a directory,
+    /// created when missing. Unlike `--dest`, it is never taken as a file path.
+    Directory(PathBuf),
+}
+
+// If --dest is None, default_receive_dir from config.json is chosen.
+// If default_receive_dir is None or empty, the current directory is chosen.
 fn resolve_dest(
     dest: Option<PathBuf>,
     default_receive_dir: Option<PathBuf>,
     home: Option<&Path>,
-) -> PathBuf {
-    dest.or_else(|| default_receive_dir.map(|d| expand_tilde(&d, home)))
-        .unwrap_or_else(|| PathBuf::from("."))
+) -> Result<ResolvedDest> {
+    if let Some(dest) = dest {
+        anyhow::ensure!(!dest.as_os_str().is_empty(), "--dest must not be empty");
+        return Ok(ResolvedDest::Explicit(dest));
+    }
+    let dir = default_receive_dir
+        .filter(|d| !d.as_os_str().is_empty())
+        .map(|d| expand_tilde(&d, home))
+        .unwrap_or_else(|| PathBuf::from("."));
+    Ok(ResolvedDest::Directory(dir))
 }
 
 fn check_dest(
@@ -39,6 +57,24 @@ fn check_dest(
     } else {
         dest.to_path_buf()
     };
+    reject_existing(expected, force_overwrite)
+}
+
+fn check_dir_dest(
+    dir: &Path,
+    name: Option<&str>,
+    hash_hex: &str,
+    force_overwrite: bool,
+) -> Result<PathBuf> {
+    anyhow::ensure!(
+        !dir.exists() || dir.is_dir(),
+        "receive directory '{}' exists but is not a directory",
+        dir.display()
+    );
+    reject_existing(dir.join(name.unwrap_or(hash_hex)), force_overwrite)
+}
+
+fn reject_existing(expected: PathBuf, force_overwrite: bool) -> Result<PathBuf> {
     if expected.exists() && !force_overwrite {
         anyhow::bail!(
             "destination '{}' already exists; \
@@ -63,8 +99,17 @@ pub(crate) async fn handle_receive<R: Registry + Clone + Send + Sync + 'static>(
 
     // for resolving ~ in default_receive_dir
     let home_dir = dirs_next::home_dir();
-    let dest = resolve_dest(dest, default_receive_dir, home_dir.as_deref());
-    let dest_path = check_dest(&dest, ticket.name.as_deref(), &hash_hex, force_overwrite)?;
+    let resolved = resolve_dest(dest, default_receive_dir, home_dir.as_deref())?;
+    let name = ticket.name.as_deref();
+    let dest_path = match &resolved {
+        ResolvedDest::Explicit(dest) => check_dest(dest, name, &hash_hex, force_overwrite)?,
+        ResolvedDest::Directory(dir) => check_dir_dest(dir, name, &hash_hex, force_overwrite)?,
+    };
+    if let ResolvedDest::Directory(dir) = &resolved {
+        tokio::fs::create_dir_all(dir)
+            .await
+            .with_context(|| format!("creating receive directory '{}'", dir.display()))?;
+    }
 
     send(
         tx,
@@ -217,24 +262,82 @@ mod tests {
     #[test]
     fn receive_dir_explicit_dest_takes_precedence_over_config_default() {
         let got = resolve_dest(Some("/from/flag".into()), Some("/from/config".into()), None);
-        assert_eq!(got, PathBuf::from("/from/flag"));
+        assert_eq!(got.unwrap(), ResolvedDest::Explicit("/from/flag".into()));
     }
 
     #[test]
     fn receive_dir_config_default_is_used_when_dest_is_absent() {
         let got = resolve_dest(None, Some("/from/config".into()), None);
-        assert_eq!(got, PathBuf::from("/from/config"));
+        assert_eq!(got.unwrap(), ResolvedDest::Directory("/from/config".into()));
     }
 
     #[test]
     fn receive_dir_explicit_dest_is_used_when_config_default_is_absent() {
         let got = resolve_dest(Some("/from/flag".into()), None, None);
-        assert_eq!(got, PathBuf::from("/from/flag"));
+        assert_eq!(got.unwrap(), ResolvedDest::Explicit("/from/flag".into()));
     }
 
     #[test]
     fn receive_dir_falls_back_to_current_dir_when_neither_is_set() {
-        assert_eq!(resolve_dest(None, None, None), PathBuf::from("."));
+        let got = resolve_dest(None, None, None);
+        assert_eq!(got.unwrap(), ResolvedDest::Directory(".".into()));
+    }
+
+    #[test]
+    fn receive_dir_empty_config_default_is_treated_as_unset() {
+        let got = resolve_dest(None, Some("".into()), None);
+        assert_eq!(got.unwrap(), ResolvedDest::Directory(".".into()));
+    }
+
+    #[test]
+    fn receive_dir_empty_config_default_defers_to_explicit_dest() {
+        let got = resolve_dest(Some("/from/flag".into()), Some("".into()), None);
+        assert_eq!(got.unwrap(), ResolvedDest::Explicit("/from/flag".into()));
+    }
+
+    #[test]
+    fn receive_dir_empty_explicit_dest_is_rejected() {
+        let err = resolve_dest(Some("".into()), Some("/from/config".into()), None).unwrap_err();
+        assert!(err.to_string().contains("--dest must not be empty"));
+    }
+
+    #[test]
+    fn dir_dest_missing_directory_places_file_inside_it() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.path().join("not").join("yet");
+        let got = check_dir_dest(&missing, Some("fox.txt"), "deadbeef", false).unwrap();
+        assert_eq!(got, missing.join("fox.txt"));
+    }
+
+    #[test]
+    fn dir_dest_without_ticket_name_falls_back_to_hash() {
+        let dir = TempDir::new().unwrap();
+        let got = check_dir_dest(dir.path(), None, "deadbeef", false).unwrap();
+        assert_eq!(got, dir.path().join("deadbeef"));
+    }
+
+    #[test]
+    fn dir_dest_that_is_a_file_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("not-a-dir");
+        std::fs::write(&file, b"x").unwrap();
+        let err = check_dir_dest(&file, Some("fox.txt"), "deadbeef", false).unwrap_err();
+        assert!(err.to_string().contains("is not a directory"));
+    }
+
+    #[test]
+    fn dir_dest_existing_file_without_force_overwrite_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("fox.txt"), b"old").unwrap();
+        let err = check_dir_dest(dir.path(), Some("fox.txt"), "deadbeef", false).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn dir_dest_existing_file_with_force_overwrite_is_accepted() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("fox.txt"), b"old").unwrap();
+        assert!(check_dir_dest(dir.path(), Some("fox.txt"), "deadbeef", true).is_ok());
     }
 
     #[test]
@@ -275,13 +378,16 @@ mod tests {
     fn receive_dir_config_default_is_tilde_expanded() {
         let home = PathBuf::from("/home/fake");
         let got = resolve_dest(None, Some("~/Downloads".into()), Some(&home));
-        assert_eq!(got, PathBuf::from("/home/fake/Downloads"));
+        assert_eq!(
+            got.unwrap(),
+            ResolvedDest::Directory("/home/fake/Downloads".into())
+        );
     }
 
     #[test]
     fn receive_dir_explicit_dest_is_not_tilde_expanded() {
         let home = PathBuf::from("/home/fake");
         let got = resolve_dest(Some("~/Downloads".into()), None, Some(&home));
-        assert_eq!(got, PathBuf::from("~/Downloads"));
+        assert_eq!(got.unwrap(), ResolvedDest::Explicit("~/Downloads".into()));
     }
 }
