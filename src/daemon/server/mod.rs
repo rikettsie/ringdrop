@@ -11,6 +11,7 @@
 
 mod handlers;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,7 +28,6 @@ use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::config::Config;
 use crate::core::Node;
 use crate::daemon::protocol::{Event, Op, Request};
 
@@ -43,7 +43,7 @@ use crate::daemon::protocol::{Event, Op, Request};
 /// [`Op::Shutdown`]: crate::daemon::protocol::Op::Shutdown
 pub struct DaemonServer<R> {
     node: Arc<Node<R>>,
-    config: Arc<Config>,
+    default_receive_dir: Option<PathBuf>,
     listener: TcpListener,
     shutdown: Arc<Notify>,
 }
@@ -51,17 +51,27 @@ pub struct DaemonServer<R> {
 impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
     /// Binds the daemon to `127.0.0.1:port` (use `0` to let the OS pick a port).
     ///
+    /// `default_receive_dir` is where [`Op::Receive`] saves files when the
+    /// request carries no destination; `None` falls back to the daemon's
+    /// current directory.
+    ///
     /// # Errors
     ///
     /// Returns an error if the port is already in use.
-    pub async fn bind(node: Node<R>, config: Config, port: u16) -> Result<Self> {
+    ///
+    /// [`Op::Receive`]: crate::daemon::protocol::Op::Receive
+    pub async fn bind(
+        node: Node<R>,
+        default_receive_dir: Option<PathBuf>,
+        port: u16,
+    ) -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
             .map_err(|e| anyhow::anyhow!("cannot bind to port {port}: {e}"))?;
         info!(port, "ringdrop daemon listening");
         Ok(Self {
             node: Arc::new(node),
-            config: Arc::new(config),
+            default_receive_dir,
             listener,
             shutdown: Arc::new(Notify::new()),
         })
@@ -96,10 +106,10 @@ impl<R: Registry + Clone + Send + Sync + 'static> DaemonServer<R> {
                     let (stream, addr) = result?;
                     info!(%addr, "connection accepted");
                     let node = Arc::clone(&self.node);
-                    let config = Arc::clone(&self.config);
+                    let default_receive_dir = self.default_receive_dir.clone();
                     let shutdown = Arc::clone(&self.shutdown);
                     tasks.spawn(async move {
-                        if let Err(e) = handle_connection(stream, node, config, shutdown).await {
+                        if let Err(e) = handle_connection(stream, node, default_receive_dir, shutdown).await {
                             error!("connection error: {e:#}");
                         }
                     });
@@ -133,7 +143,7 @@ use super::MAX_LINE_BYTES;
 async fn handle_connection<R: Registry + Clone + Send + Sync + 'static>(
     stream: TcpStream,
     node: Arc<Node<R>>,
-    config: Arc<Config>,
+    default_receive_dir: Option<PathBuf>,
     shutdown: Arc<Notify>,
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
@@ -171,7 +181,14 @@ async fn handle_connection<R: Registry + Clone + Send + Sync + 'static>(
     let req_id = req.req_id;
     let (tx, mut rx) = mpsc::channel::<Event>(32);
 
-    tokio::spawn(dispatch(req.op, req_id, node, config, tx, shutdown));
+    tokio::spawn(dispatch(
+        req.op,
+        req_id,
+        node,
+        default_receive_dir,
+        tx,
+        shutdown,
+    ));
 
     while let Some(event) = rx.recv().await {
         if !emit(&mut writer, &event).await {
@@ -203,7 +220,7 @@ async fn dispatch<R: Registry + Clone + Send + Sync + 'static>(
     op: Op,
     req_id: Uuid,
     node: Arc<Node<R>>,
-    config: Arc<Config>,
+    default_receive_dir: Option<PathBuf>,
     tx: mpsc::Sender<Event>,
     shutdown: Arc<Notify>,
 ) {
@@ -213,7 +230,7 @@ async fn dispatch<R: Registry + Clone + Send + Sync + 'static>(
         return;
     }
 
-    match handle_op(op, req_id, &node, &config, &tx).await {
+    match handle_op(op, req_id, &node, default_receive_dir, &tx).await {
         Ok(()) => {}
         Err(e) => {
             let _ = tx.send(Event::error(req_id, e.to_string())).await;
@@ -225,7 +242,7 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
     op: Op,
     req_id: Uuid,
     node: &Node<R>,
-    config: &Config,
+    default_receive_dir: Option<PathBuf>,
     tx: &mpsc::Sender<Event>,
 ) -> Result<()> {
     match op {
@@ -382,7 +399,7 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
                 tx,
                 ticket,
                 dest,
-                config.default_receive_dir.clone(),
+                default_receive_dir,
                 force_overwrite,
             )
             .await?;

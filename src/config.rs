@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// see and add to their rings.
 ///
 /// [`EndpointId`]: iroh::EndpointId
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     /// Long-term Ed25519 secret key; determines the [`EndpointId`] peers add to their rings.
     ///
