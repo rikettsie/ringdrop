@@ -2,13 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.20.1] - 2026-09-20
+## [0.21.0] - 2026-09-22
 
 ### Refactoring
 
-- Bump v0.20.1
+- (**deps**) Bump iroh-rings to 0.8.1
 
-## [0.20.0] - 2026-09-19
+## [0.20.1] - 2026-09-19
 
 ### Bug Fixes
 
