@@ -105,7 +105,7 @@ fn peer_ring_set<R: Registry>(registry: &R, peer: &str) -> Result<HashSet<String
                 .list_ring_peers(r.as_str())
                 .unwrap_or_default()
                 .iter()
-                .any(|(id, _)| *id == peer_id)
+                .any(|m| m.peer == peer_id)
         })
         .map(|r| r.as_str().to_owned())
         .collect();
@@ -636,7 +636,8 @@ mod tests {
         reg.create_ring("friends").unwrap();
         reg.create_ring("work").unwrap();
         let (peer_id, peer_str) = make_peer_str();
-        reg.add_peer_to_ring("friends", peer_id, None).unwrap();
+        reg.add_peer_to_ring("friends", peer_id, None, None)
+            .unwrap();
 
         let set = peer_ring_set(&reg, &peer_str).unwrap();
         assert!(set.contains("friends"));
@@ -683,7 +684,7 @@ mod tests {
         remote.registry.create_ring("access").unwrap();
         remote
             .registry
-            .add_peer_to_ring("access", local_id, None)
+            .add_peer_to_ring("access", local_id, None, None)
             .unwrap();
         remote
             .registry

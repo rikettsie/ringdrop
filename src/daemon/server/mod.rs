@@ -333,7 +333,8 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
             let lines = handlers::ring::ring_members_lines(&node.registry, &node.peers, &ring)?;
             send_lines(tx, req_id, &lines).await;
             if ring != iroh_rings::OPEN_RING_NAME {
-                for (peer_id, _label) in node.registry.list_ring_peers(&ring)? {
+                for member in node.registry.list_ring_peers(&ring)? {
+                    let peer_id = member.peer;
                     let nickname = node.peers.get(&peer_id).ok().flatten().flatten();
                     let _ = tx
                         .send(Event::record(

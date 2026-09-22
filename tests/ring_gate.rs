@@ -46,7 +46,7 @@ async fn private_ring_allows_member() {
     sender
         .node
         .registry
-        .add_peer_to_ring("friends", receiver.node.endpoint.id(), None)
+        .add_peer_to_ring("friends", receiver.node.endpoint.id(), None, None)
         .unwrap();
     sender
         .node

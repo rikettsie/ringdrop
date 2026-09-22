@@ -486,7 +486,7 @@ mod tests {
         server.registry.create_ring("test-ring").unwrap();
         server
             .registry
-            .add_peer_to_ring("test-ring", client_id, None)
+            .add_peer_to_ring("test-ring", client_id, None, None)
             .unwrap();
         server
             .registry
@@ -535,7 +535,7 @@ mod tests {
         server.registry.create_ring("r").unwrap();
         server
             .registry
-            .add_peer_to_ring("r", client_id, None)
+            .add_peer_to_ring("r", client_id, None, None)
             .unwrap();
         server
             .registry
