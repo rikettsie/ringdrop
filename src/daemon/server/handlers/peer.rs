@@ -85,7 +85,7 @@ pub(crate) fn peer_remove_lines<R: Registry>(
             continue;
         }
         let members = registry.list_ring_peers(ring.as_str())?;
-        if members.iter().any(|(id, _)| *id == peer_id) {
+        if members.iter().any(|m| m.peer == peer_id) {
             registry.remove_peer_from_ring(ring.as_str(), peer_id)?;
             removed_from.push(ring.as_str().to_owned());
         }
@@ -223,8 +223,12 @@ mod tests {
         peers.upsert(peer_id, Some("alice")).unwrap();
         registry.create_ring("friends").unwrap();
         registry.create_ring("work").unwrap();
-        registry.add_peer_to_ring("friends", peer_id, None).unwrap();
-        registry.add_peer_to_ring("work", peer_id, None).unwrap();
+        registry
+            .add_peer_to_ring("friends", peer_id, None, None)
+            .unwrap();
+        registry
+            .add_peer_to_ring("work", peer_id, None, None)
+            .unwrap();
 
         let lines = peer_remove_lines(&peers, &grants, &registry, &peer_str).unwrap();
 
@@ -233,12 +237,12 @@ mod tests {
             .list_ring_peers("friends")
             .unwrap()
             .iter()
-            .all(|(id, _)| *id != peer_id));
+            .all(|m| m.peer != peer_id));
         assert!(registry
             .list_ring_peers("work")
             .unwrap()
             .iter()
-            .all(|(id, _)| *id != peer_id));
+            .all(|m| m.peer != peer_id));
         assert!(lines
             .iter()
             .any(|l| l.contains("friends") || l.contains("work")));

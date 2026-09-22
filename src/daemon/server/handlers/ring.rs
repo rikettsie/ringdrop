@@ -61,7 +61,7 @@ pub(crate) fn ring_add_lines(
     if peer_id == public_id {
         anyhow::bail!("cannot add yourself to a ring");
     }
-    registry.add_peer_to_ring(ring, peer_id, None)?;
+    registry.add_peer_to_ring(ring, peer_id, None, None)?;
     peer_store.ensure(peer_id)?;
     Ok(vec![format!("Added {peer_id} to ring {ring}")])
 }
@@ -101,8 +101,8 @@ pub(crate) fn ring_members_lines(
         ]);
     }
     let mut out = vec![format!("Ring '{ring}' — {} members:", members.len())];
-    for (peer, _label) in members {
-        out.push(format!("  {}", display_peer(&peer, peer_store)));
+    for member in members {
+        out.push(format!("  {}", display_peer(&member.peer, peer_store)));
     }
     Ok(out)
 }

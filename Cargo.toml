@@ -23,7 +23,7 @@ name = "rdrop"
 path = "src/main.rs"
 
 [dependencies]
-iroh-rings = { version = "0.7.2", features = ["redb", "fs", "mem"] }
+iroh-rings = { version = "0.8.1", features = ["redb", "fs", "mem"] }
 
 # Core components: transport protocol, chunking, concurrency
 iroh = "1.1.0"
