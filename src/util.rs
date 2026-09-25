@@ -1,6 +1,7 @@
 //! Shared CLI/daemon utilities: default paths, argument parsers, and display helpers.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::Result;
 use iroh::{EndpointAddr, EndpointId};
@@ -207,6 +208,62 @@ pub fn parse_hash(s: &str) -> Result<Hash> {
     s.parse().map_err(|e| anyhow::anyhow!("invalid hash: {e}"))
 }
 
+/// Parses a relative duration such as `30s`, `15m`, `12h`, `7d` or `2w`.
+///
+/// The value is a positive integer followed by exactly one unit suffix:
+/// `s` (seconds), `m` (minutes), `h` (hours), `d` (days) or `w` (weeks).
+///
+/// # Errors
+///
+/// Returns an error if the unit is missing or unknown, the number is not a
+/// positive integer, or the resulting duration overflows.
+pub fn parse_duration(s: &str) -> Result<Duration> {
+    let s = s.trim();
+    let unit_start = s
+        .find(|c: char| !c.is_ascii_digit())
+        .ok_or_else(|| anyhow::anyhow!("missing unit in '{s}' (use s, m, h, d or w)"))?;
+    let (number, unit) = s.split_at(unit_start);
+    let value: u64 = number
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid duration '{s}': expected e.g. 30m, 12h, 7d"))?;
+    if value == 0 {
+        anyhow::bail!("duration must be greater than zero");
+    }
+    let unit_secs: u64 = match unit {
+        "s" => 1,
+        "m" => 60,
+        "h" => 3_600,
+        "d" => 86_400,
+        "w" => 604_800,
+        other => anyhow::bail!("unknown duration unit '{other}' (use s, m, h, d or w)"),
+    };
+    let secs = value
+        .checked_mul(unit_secs)
+        .ok_or_else(|| anyhow::anyhow!("duration '{s}' is too large"))?;
+    Ok(Duration::from_secs(secs))
+}
+
+/// Formats a remaining duration using its two most significant units,
+/// e.g. `6d 23h`, `45m 10s`, or `30s`. Sub-second remainders are dropped.
+pub(crate) fn format_remaining(remaining: Duration) -> String {
+    const UNITS: [(u64, &str); 4] = [(86_400, "d"), (3_600, "h"), (60, "m"), (1, "s")];
+    let secs = remaining.as_secs();
+    let Some(major) = UNITS.iter().position(|&(unit_secs, _)| secs >= unit_secs) else {
+        return "0s".to_owned();
+    };
+    let (major_secs, major_suffix) = UNITS[major];
+    let major_part = format!("{}{major_suffix}", secs / major_secs);
+    match UNITS.get(major + 1) {
+        Some(&(minor_secs, minor_suffix)) if (secs % major_secs) / minor_secs > 0 => {
+            format!(
+                "{major_part} {}{minor_suffix}",
+                (secs % major_secs) / minor_secs
+            )
+        }
+        _ => major_part,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use iroh::SecretKey;
@@ -273,5 +330,49 @@ mod tests {
         let result = format_peer_entry(&id, Some("alice"));
         assert!(result.contains(&id.to_string()));
         assert!(result.contains("(alice)"));
+    }
+
+    #[test]
+    fn parse_duration_accepts_each_unit() {
+        let cases = [
+            ("30s", 30),
+            ("15m", 900),
+            ("12h", 43_200),
+            ("7d", 604_800),
+            ("2w", 1_209_600),
+        ];
+        for (input, secs) in cases {
+            assert_eq!(
+                parse_duration(input).unwrap(),
+                Duration::from_secs(secs),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_duration_rejects_invalid_input() {
+        for input in [
+            "",
+            "7",
+            "d",
+            "0d",
+            "-1d",
+            "1.5h",
+            "7y",
+            "7 d",
+            "7dd",
+            "99999999999999999w",
+        ] {
+            assert!(parse_duration(input).is_err(), "{input} should be rejected");
+        }
+    }
+
+    #[test]
+    fn format_remaining_shows_two_most_significant_units() {
+        assert_eq!(format_remaining(Duration::from_secs(604_799)), "6d 23h");
+        assert_eq!(format_remaining(Duration::from_secs(2_710)), "45m 10s");
+        assert_eq!(format_remaining(Duration::from_secs(86_430)), "1d");
+        assert_eq!(format_remaining(Duration::from_millis(500)), "0s");
     }
 }

@@ -313,13 +313,18 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
             }
             let _ = tx.send(Event::done(req_id)).await;
         }
-        Op::RingAdd { ring, peer } => {
+        Op::RingAdd {
+            ring,
+            peer,
+            expires_at,
+        } => {
             let lines = handlers::ring::ring_add_lines(
                 &node.registry,
                 &node.peers,
                 node.endpoint.id(),
                 &ring,
                 &peer,
+                expires_at,
             )?;
             send_lines(tx, req_id, &lines).await;
             let _ = tx.send(Event::done(req_id)).await;

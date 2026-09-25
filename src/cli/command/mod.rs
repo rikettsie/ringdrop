@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::Result;
 use clap::{ArgGroup, Subcommand};
@@ -228,6 +229,9 @@ pub(super) enum RingCmd {
         ring: String,
         #[arg(value_name = "PEER-ID")]
         peer: String,
+        /// Remove the peer from the ring after this long (e.g. 30m, 12h, 7d, 2w)
+        #[arg(long, value_name = "DURATION", value_parser = crate::util::parse_duration)]
+        expires: Option<Duration>,
     },
 
     /// Remove a peer from a ring

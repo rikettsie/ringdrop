@@ -49,9 +49,9 @@ Manage rings. A ring is a named group of peers; blobs attached to a ring are dow
 |---|---|
 | `rdrop ring new <name>` | Create a new ring |
 | `rdrop ring list` | List all rings with member counts |
-| `rdrop ring add <ring> <peer-id>` | Add a peer to a ring (auto-registers in address book) |
+| `rdrop ring add <ring> <peer-id> [--expires <duration>]` | Add a peer to a ring, optionally for a limited time (auto-registers in address book) |
 | `rdrop ring remove <ring> <peer-id>` | Remove a peer from a ring |
-| `rdrop ring members <ring>` | List members of a ring |
+| `rdrop ring members <ring>` | List members of a ring, with remaining time for expiring memberships |
 
 Examples:
 
@@ -59,12 +59,15 @@ Examples:
 rdrop ring new friends
 rdrop ring list
 rdrop ring add friends <peer-id>
+rdrop ring add friends <peer-id> --expires 7d
 rdrop ring remove friends <peer-id>
 rdrop ring members friends
 ```
 
 **Notes:**
 - `ring add` auto-registers the peer in the local peer address book if not already present. You can use `rdrop peer add <peer-id> --nickname <name>` afterward to assign a nickname.
+- `--expires` takes a positive integer followed by one unit: `s`, `m`, `h`, `d` or `w` (e.g. `30m`, `12h`, `7d`, `2w`). Once expired, the peer loses access and disappears from `ring members`.
+- Re-adding a live member without `--expires` keeps its current expiry. To make an expiring membership permanent, `ring remove` the peer and add it again.
 - The built-in `open` ring has no membership list — any peer can access blobs associated with this special ring.
 
 ---

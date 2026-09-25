@@ -97,6 +97,10 @@ pub enum Op {
         ///
         /// [`EndpointId`]: iroh::EndpointId
         peer: String,
+        /// When the membership expires, in seconds since the Unix epoch;
+        /// `None` means it never expires.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expires_at: Option<u64>,
     },
     /// Removes `peer` from `ring`.
     RingRemove {
@@ -590,11 +594,40 @@ mod tests {
         let json = serde_json::to_string(&Op::RingAdd {
             ring: "friends".into(),
             peer: "abc123".into(),
+            expires_at: None,
         })
         .unwrap();
         assert_eq!(
             json,
             r#"{"op":"ring_add","ring":"friends","peer":"abc123"}"#
+        );
+    }
+
+    #[test]
+    fn op_ring_add_with_expiry_includes_expires_at_field() {
+        let json = serde_json::to_string(&Op::RingAdd {
+            ring: "friends".into(),
+            peer: "abc123".into(),
+            expires_at: Some(1_800_000_000),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"ring_add","ring":"friends","peer":"abc123","expires_at":1800000000}"#
+        );
+    }
+
+    #[test]
+    fn op_ring_add_without_expires_at_deserializes_as_never_expiring() {
+        let op: Op =
+            serde_json::from_str(r#"{"op":"ring_add","ring":"friends","peer":"abc123"}"#).unwrap();
+        assert_eq!(
+            op,
+            Op::RingAdd {
+                ring: "friends".into(),
+                peer: "abc123".into(),
+                expires_at: None,
+            }
         );
     }
 
