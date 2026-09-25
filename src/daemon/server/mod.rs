@@ -341,15 +341,18 @@ async fn handle_op<R: Registry + Clone + Send + Sync + 'static>(
                 for member in node.registry.list_ring_peers(&ring)? {
                     let peer_id = member.peer;
                     let nickname = node.peers.get(&peer_id).ok().flatten().flatten();
-                    let _ = tx
-                        .send(Event::record(
-                            req_id,
-                            serde_json::json!({
-                                "peer_id": peer_id.to_string(),
-                                "nickname": nickname,
-                            }),
-                        ))
-                        .await;
+                    let mut record = serde_json::json!({
+                        "peer_id": peer_id.to_string(),
+                        "nickname": nickname,
+                    });
+                    if let Some(at) = member.expires_at {
+                        let unix_secs = at
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .context("membership expiry is before the Unix epoch")?
+                            .as_secs();
+                        record["expires_at"] = unix_secs.into();
+                    }
+                    let _ = tx.send(Event::record(req_id, record)).await;
                 }
             }
             let _ = tx.send(Event::done(req_id)).await;

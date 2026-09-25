@@ -467,3 +467,61 @@ async fn grant_revoke_removes_grant_from_list() {
     assert_eq!(lines, vec!["No grants."]);
     daemon.shutdown().await;
 }
+
+/// Returns the `Record` payloads emitted for `RingMembers { ring }`.
+async fn ring_member_records(daemon: &common::TestDaemon, ring: &str) -> Vec<serde_json::Value> {
+    let mut records = Vec::new();
+    daemon
+        .client
+        .send(Op::RingMembers { ring: ring.into() }, |event| {
+            if let EventKind::Record { value } = event.kind {
+                records.push(value);
+            }
+        })
+        .await
+        .unwrap();
+    records
+}
+
+#[tokio::test]
+async fn ring_members_records_include_expiry_only_for_expiring_members() {
+    let daemon = common::TestDaemon::start().await;
+    daemon
+        .client
+        .run(Op::RingNew {
+            name: "friends".into(),
+        })
+        .await
+        .unwrap();
+    let permanent = iroh::SecretKey::generate().public().to_string();
+    let expiring = iroh::SecretKey::generate().public().to_string();
+    let expires_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 3_600;
+    for (peer, expires_at) in [(&permanent, None), (&expiring, Some(expires_at))] {
+        daemon
+            .client
+            .run(Op::RingAdd {
+                ring: "friends".into(),
+                peer: peer.clone(),
+                expires_at,
+            })
+            .await
+            .unwrap();
+    }
+
+    let records = ring_member_records(&daemon, "friends").await;
+
+    let expiry_of = |peer: &str| {
+        records
+            .iter()
+            .find(|r| r["peer_id"] == peer)
+            .map(|r| r.get("expires_at").cloned())
+            .expect("member record missing")
+    };
+    assert_eq!(expiry_of(&permanent), None);
+    assert_eq!(expiry_of(&expiring), Some(expires_at.into()));
+    daemon.shutdown().await;
+}
