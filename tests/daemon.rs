@@ -80,6 +80,7 @@ async fn ring_add_self_is_rejected_via_daemon() {
         .run(Op::RingAdd {
             ring: "test".into(),
             peer: node_id,
+            expires_at: None,
         })
         .await
         .unwrap_err();

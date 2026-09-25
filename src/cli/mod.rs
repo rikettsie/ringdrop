@@ -16,6 +16,7 @@
 //! rdrop ring new friends               # create a ring named "friends"
 //! rdrop ring list                      # list all rings
 //! rdrop ring add friends <peer-id>     # add a peer to a ring (auto-registers in address book)
+//! rdrop ring add friends <peer-id> --expires 7d  # membership expires after 7 days
 //! rdrop ring members friends
 //!
 //! # Manage the local peer address book

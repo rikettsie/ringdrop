@@ -7,11 +7,13 @@
 //! [`Op::RingRemove`]: crate::daemon::protocol::Op::RingRemove
 //! [`Op::RingMembers`]: crate::daemon::protocol::Op::RingMembers
 
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use anyhow::Result;
 use iroh_rings::{Registry, OPEN_RING_NAME};
 
 use crate::core::peers::PeerStore;
-use crate::util::{display_peer, parse_peer_id};
+use crate::util::{display_peer, format_remaining, parse_peer_id};
 
 pub(crate) fn ring_new_lines(registry: &impl Registry, name: &str) -> Result<Vec<String>> {
     registry.create_ring(name)?;
@@ -40,6 +42,9 @@ pub(crate) fn ring_list_lines(registry: &impl Registry) -> Result<Vec<String>> {
 
 /// Adds `peer` to `ring` and ensures the peer exists in the peer store.
 ///
+/// `expires_at` is in seconds since the Unix epoch; `None` adds a membership
+/// that never expires (or keeps the existing expiry of a live member).
+///
 /// Nicknames are managed independently via [`Op::PeerNick`] / [`Op::PeerAdd`].
 /// The iroh-rings registry is always called with `label: None`.
 ///
@@ -51,6 +56,7 @@ pub(crate) fn ring_add_lines(
     public_id: iroh::EndpointId,
     ring: &str,
     peer: &str,
+    expires_at: Option<u64>,
 ) -> Result<Vec<String>> {
     if ring == OPEN_RING_NAME {
         return Ok(vec![
@@ -61,9 +67,36 @@ pub(crate) fn ring_add_lines(
     if peer_id == public_id {
         anyhow::bail!("cannot add yourself to a ring");
     }
-    registry.add_peer_to_ring(ring, peer_id, None, None)?;
+    let expiry = expires_at.map(future_expiry).transpose()?;
+    registry.add_peer_to_ring(ring, peer_id, None, expiry.as_ref().map(|e| e.at))?;
     peer_store.ensure(peer_id)?;
-    Ok(vec![format!("Added {peer_id} to ring {ring}")])
+    let line = match expiry {
+        Some(e) => format!(
+            "Added {peer_id} to ring {ring} (expires in {})",
+            format_remaining(e.remaining)
+        ),
+        None => format!("Added {peer_id} to ring {ring}"),
+    };
+    Ok(vec![line])
+}
+
+struct Expiry {
+    at: SystemTime,
+    remaining: Duration,
+}
+
+/// Converts a Unix timestamp into an expiry, rejecting timestamps that are
+/// not in the future: the registry would store them as already-expired.
+fn future_expiry(unix_secs: u64) -> Result<Expiry> {
+    let at = UNIX_EPOCH
+        .checked_add(Duration::from_secs(unix_secs))
+        .ok_or_else(|| anyhow::anyhow!("expiry timestamp {unix_secs} is out of range"))?;
+    let remaining = at
+        .duration_since(SystemTime::now())
+        .ok()
+        .filter(|d| !d.is_zero())
+        .ok_or_else(|| anyhow::anyhow!("expiry must be in the future"))?;
+    Ok(Expiry { at, remaining })
 }
 
 pub(crate) fn ring_remove_lines(
@@ -100,9 +133,18 @@ pub(crate) fn ring_members_lines(
             "Peers print their peer-id with: rdrop id".to_owned(),
         ]);
     }
+    let now = SystemTime::now();
     let mut out = vec![format!("Ring '{ring}' — {} members:", members.len())];
     for member in members {
-        out.push(format!("  {}", display_peer(&member.peer, peer_store)));
+        let peer = display_peer(&member.peer, peer_store);
+        let line = match member.expires_at {
+            Some(at) => {
+                let remaining = at.duration_since(now).unwrap_or_default();
+                format!("  {peer}  — expires in {}", format_remaining(remaining))
+            }
+            None => format!("  {peer}"),
+        };
+        out.push(line);
     }
     Ok(out)
 }
@@ -138,6 +180,7 @@ mod tests {
             public_id,
             "friends",
             &public_id.to_string(),
+            None,
         )
         .unwrap_err();
         assert!(err.to_string().contains("yourself"));
@@ -149,7 +192,15 @@ mod tests {
         let (registry, peers, public_id) = setup(&dir);
         let (_, peer_str) = new_peer();
 
-        ring_add_lines(&registry, &peers, public_id, OPEN_RING_NAME, &peer_str).unwrap();
+        ring_add_lines(
+            &registry,
+            &peers,
+            public_id,
+            OPEN_RING_NAME,
+            &peer_str,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(registry.list_ring_peers(OPEN_RING_NAME).unwrap().len(), 0);
     }
@@ -161,7 +212,7 @@ mod tests {
         registry.create_ring("friends").unwrap();
         let (peer_id, peer_str) = new_peer();
 
-        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str).unwrap();
+        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str, None).unwrap();
 
         assert!(peers.get(&peer_id).unwrap().is_some());
     }
@@ -174,9 +225,103 @@ mod tests {
         let (peer_id, peer_str) = new_peer();
         peers.upsert(peer_id, Some("alice")).unwrap();
 
-        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str).unwrap();
+        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str, None).unwrap();
 
         assert_eq!(peers.get(&peer_id).unwrap(), Some(Some("alice".to_owned())));
+    }
+
+    fn unix_secs_from_now(offset: Duration) -> u64 {
+        (SystemTime::now() + offset)
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
+
+    #[test]
+    fn ring_add_with_expiry_stores_expiry_and_reports_it() {
+        let dir = TempDir::new().unwrap();
+        let (registry, peers, public_id) = setup(&dir);
+        registry.create_ring("friends").unwrap();
+        let (_, peer_str) = new_peer();
+        let expires_at = unix_secs_from_now(Duration::from_secs(7 * 86_400));
+
+        let lines = ring_add_lines(
+            &registry,
+            &peers,
+            public_id,
+            "friends",
+            &peer_str,
+            Some(expires_at),
+        )
+        .unwrap();
+
+        assert!(lines[0].contains("expires in 6d 23h"), "got: {lines:?}");
+        let members = registry.list_ring_peers("friends").unwrap();
+        assert_eq!(
+            members[0].expires_at,
+            Some(UNIX_EPOCH + Duration::from_secs(expires_at))
+        );
+    }
+
+    #[test]
+    fn ring_add_with_past_expiry_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let (registry, peers, public_id) = setup(&dir);
+        registry.create_ring("friends").unwrap();
+        let (_, peer_str) = new_peer();
+        let past = unix_secs_from_now(Duration::ZERO) - 60;
+
+        let err = ring_add_lines(
+            &registry,
+            &peers,
+            public_id,
+            "friends",
+            &peer_str,
+            Some(past),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("future"), "got: {err}");
+        assert_eq!(registry.list_ring_peers("friends").unwrap().len(), 0);
+    }
+
+    #[test]
+    fn ring_members_shows_remaining_time_for_expiring_member() {
+        let dir = TempDir::new().unwrap();
+        let (registry, peers, public_id) = setup(&dir);
+        registry.create_ring("friends").unwrap();
+        let (_, peer_str) = new_peer();
+        let expires_at = unix_secs_from_now(Duration::from_secs(3 * 3_600));
+        ring_add_lines(
+            &registry,
+            &peers,
+            public_id,
+            "friends",
+            &peer_str,
+            Some(expires_at),
+        )
+        .unwrap();
+
+        let lines = ring_members_lines(&registry, &peers, "friends").unwrap();
+        assert!(
+            lines.iter().any(|l| l.contains("expires in 2h 59m")),
+            "got: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn ring_members_omits_expired_member() {
+        let dir = TempDir::new().unwrap();
+        let (registry, peers, _) = setup(&dir);
+        registry.create_ring("friends").unwrap();
+        let (peer_id, _) = new_peer();
+        let already_expired = SystemTime::now() - Duration::from_secs(60);
+        registry
+            .add_peer_to_ring("friends", peer_id, None, Some(already_expired))
+            .unwrap();
+
+        let lines = ring_members_lines(&registry, &peers, "friends").unwrap();
+        assert!(lines[0].contains("no members yet"), "got: {lines:?}");
     }
 
     #[test]
@@ -186,7 +331,7 @@ mod tests {
         registry.create_ring("friends").unwrap();
         let (peer_id, peer_str) = new_peer();
 
-        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str).unwrap();
+        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str, None).unwrap();
         peers.set_nickname(peer_id, "alice").unwrap();
 
         let lines = ring_members_lines(&registry, &peers, "friends").unwrap();
@@ -200,7 +345,7 @@ mod tests {
         registry.create_ring("friends").unwrap();
         let (peer_id, peer_str) = new_peer();
 
-        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str).unwrap();
+        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str, None).unwrap();
 
         let lines = ring_members_lines(&registry, &peers, "friends").unwrap();
         assert!(lines.iter().any(|l| l.contains(&peer_id.to_string())));
@@ -233,7 +378,7 @@ mod tests {
         let (registry, peers, public_id) = setup(&dir);
         registry.create_ring("work").unwrap();
         let (_, peer_str) = new_peer();
-        ring_add_lines(&registry, &peers, public_id, "work", &peer_str).unwrap();
+        ring_add_lines(&registry, &peers, public_id, "work", &peer_str, None).unwrap();
 
         let lines = ring_list_lines(&registry).unwrap();
         assert!(lines
@@ -247,7 +392,7 @@ mod tests {
         let (registry, peers, public_id) = setup(&dir);
         registry.create_ring("friends").unwrap();
         let (_, peer_str) = new_peer();
-        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str).unwrap();
+        ring_add_lines(&registry, &peers, public_id, "friends", &peer_str, None).unwrap();
 
         let lines = ring_remove_lines(&registry, "friends", &peer_str).unwrap();
         assert!(lines.iter().any(|l| l.contains("Removed")));
