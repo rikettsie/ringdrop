@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1] - 2026-09-25
+
+### Features
+
+- (**daemon**) Include membership expiry in ring members records (#49)
+
+### Refactoring
+
+- (**deps**) Bump iroh to 1.2.0 and iroh-rings to 0.8.2
+
 ## [0.22.0] - 2026-09-25
 
 ### Features
